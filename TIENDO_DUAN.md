@@ -1,0 +1,1 @@
+- [2026-03-02] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Khởi tạo repo, setup môi trường Node.js và React
