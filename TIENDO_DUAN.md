@@ -1,3 +1,4 @@
 - [2026-03-02] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Khởi tạo repo, setup môi trường Node.js và React
 - [2026-03-02] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Thiết kế CSDL bảng Users, Vehicles (Xe) và Drivers (Tài xế)
 - [2026-03-03] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Thiết kế CSDL bảng Customers, Suppliers (Nhà cung cấp)
+- [2026-03-03] Trà My <myy8037@gmail.com> hoàn thành: Thiết kế CSDL bảng Orders (Đơn hàng) và Inventory (Kho xăng dầu)
