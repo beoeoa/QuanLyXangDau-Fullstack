@@ -3,3 +3,4 @@
 - [2026-03-03] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Thiết kế CSDL bảng Customers, Suppliers (Nhà cung cấp)
 - [2026-03-03] Trà My <myy8037@gmail.com> hoàn thành: Thiết kế CSDL bảng Orders (Đơn hàng) và Inventory (Kho xăng dầu)
 - [2026-03-04] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Cấu hình kết nối Firebase Firestore
+- [2026-03-05] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Tạo schema và model cho phần Kế toán (Transactions, Invoices)
