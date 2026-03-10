@@ -11,3 +11,4 @@
 - [2026-03-09] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Viết API thêm, sửa, xóa thông tin xe bồn và đăng kiểm
 - [2026-03-09] Trà My <myy8037@gmail.com> hoàn thành: Viết API tạo đơn bán hàng mới cho bộ phận Sale
 - [2026-03-10] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Viết API quản lý danh sách nhà cung cấp và nhập liệu chiết khấu
+- [2026-03-10] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Viết API gán tài xế vào chuyến xe (Điều phối)
