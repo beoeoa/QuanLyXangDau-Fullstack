@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Hàm helper kiểm tra xem user hiện tại có phải là Admin không
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Quy tắc cho bộ sưu tập 'users'
+    match /users/{userId} {
+      // Cho phép đọc nếu đã đăng nhập
+      allow read: if request.auth != null;
+      
+      // Cho phép ghi nếu là chính chủ hoặc là Admin
+      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Quy tắc cho 'vehicles' và 'deliveryOrders' (TMS)
+    match /vehicles/{vehicleId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /deliveryOrders/{orderId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || (request.auth != null && resource.data.assignedDriverId == request.auth.uid);
+    }
+    
+    // Các collection nghiệp vụ khác (inventory, transactions, suppliers, customers)
+    // Mặc định cho phép Admin toàn quyền, user khác chỉ được đọc
+    match /products/{id} { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /suppliers/{id} { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /customers/{id} { allow read: if request.auth != null; allow write: if isAdmin(); }
+    match /transactions/{id} { allow read: if request.auth != null; allow write: if isAdmin(); }
+
+    // Quy tắc mặc định cuối cùng
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
