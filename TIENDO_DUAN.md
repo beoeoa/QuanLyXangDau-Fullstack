@@ -15,3 +15,4 @@
 - [2026-03-11] Trà My <myy8037@gmail.com> hoàn thành: Xây dựng logic trừ lùi số lượng tồn kho khi đơn hàng được duyệt
 - [2026-03-11] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Viết API thống kê công nợ khách hàng chưa thanh toán
 - [2026-03-12] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Setup luồng xác thực đăng nhập bằng JWT Token
+- [2026-03-13] Trà My <myy8037@gmail.com> hoàn thành: Xây dựng API quản lý phiếu nhập xăng dầu từ cảng
