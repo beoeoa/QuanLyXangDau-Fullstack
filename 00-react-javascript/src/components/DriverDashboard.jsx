@@ -7,6 +7,7 @@ import { createSOSReport, getSOSByDriver } from '../services/sosReportService'
 import Profile from './Profile'
 import RouteMap from './driver/RouteMap'
 import NotificationBell from './NotificationBell'
+import OCRScanner from './shared/OCRScanner'
 
 // Trạng thái 5 bước
 const STATUS_STEPS = [
@@ -43,9 +44,9 @@ function DriverDashboard({ user, onLogout }) {
   })
   const [sosForm, setSOSForm] = useState({ type: 'traffic_jam', description: '', orderId: '' })
 
-  // State quản lý việc hiển thị map cho order nào
   const [showMapForOrderId, setShowMapForOrderId] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showOCR, setShowOCR] = useState(false)
 
   useEffect(() => {
     const checkRole = async () => {
@@ -59,7 +60,6 @@ function DriverDashboard({ user, onLogout }) {
       checkRole()
       loadAllData()
 
-      // Bắt buộc cập nhật hồ sơ nếu chưa có đủ thông tin
       if (user.isProfileUpdated === false && !sessionStorage.getItem('profileAlertShown')) {
         alert('⚠️ Yêu cầu bắt buộc: Vui lòng cập nhật đầy đủ thông tin cá nhân (Số điện thoại, Địa chỉ, CCCD...) đễ hồ sơ hoàn tất!')
         setActiveMenu('profile')
@@ -81,17 +81,15 @@ function DriverDashboard({ user, onLogout }) {
     setLoading(false)
   }
 
-  // === HANDLER: Cập nhật trạng thái bước tiếp theo ===
   const handleNextStatus = async (orderId, currentStatus) => {
     const next = getNextStatus(currentStatus)
     if (!next) return
 
-    // Khi hoàn thành (unloading → completed), hỏi lít thực giao để tính hao hụt
     if (currentStatus === 'unloading' && next === 'completed') {
       const order = orders.find(o => o.id === orderId)
       const originalAmount = Number(order?.amount || 0)
       const input = prompt(`Nhập số lít THỰC GIAO (xuất: ${originalAmount.toLocaleString()} Lít):`)
-      if (input === null) return // Hủy
+      if (input === null) return
       const delivered = Number(input)
       if (isNaN(delivered) || delivered <= 0) { alert('Số liệu không hợp lệ!'); return }
 
@@ -110,7 +108,6 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  // === HANDLER: Upload ảnh chứng từ ===
   const handleDocUpload = (orderId, docType, e) => {
     const file = e.target.files[0]
     if (file) {
@@ -125,7 +122,6 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  // === HANDLER: Nhập mã seal ===
   const handleSealSubmit = async (orderId) => {
     const code = sealInput[orderId]
     if (code) {
@@ -135,7 +131,6 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  // === HANDLER: Thêm chi phí ===
   const handleAddExpense = async (e) => {
     e.preventDefault()
     const result = await addDriverExpense({
@@ -151,7 +146,6 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  // === HANDLER: Upload ảnh hóa đơn chi phí ===
   const handleExpenseImageUpload = (e) => {
     const file = e.target.files[0]
     if (file) {
@@ -161,7 +155,6 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  // === HANDLER: Gửi SOS ===
   const handleSendSOS = async (e) => {
     e.preventDefault()
     const result = await createSOSReport({
@@ -197,7 +190,6 @@ function DriverDashboard({ user, onLogout }) {
             background: 'white', borderRadius: 10, padding: 20,
             boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderLeft: '4px solid #3498db'
           }}>
-            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
               <h3 style={{ margin: 0 }}>📍 {order.destination || 'Chưa rõ'}</h3>
               <span style={{
@@ -207,7 +199,6 @@ function DriverDashboard({ user, onLogout }) {
               }}>{getStatusLabel(order.status)}</span>
             </div>
 
-            {/* Chi tiết */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 14, marginBottom: 12 }}>
               <div>🚛 Xe: <strong>{order.vehiclePlate || '-'}</strong></div>
               <div>⛽ Hàng: <strong>{order.product || '-'} ({order.amount || 0}L)</strong></div>
@@ -215,7 +206,6 @@ function DriverDashboard({ user, onLogout }) {
               <div>🏪 Đại lý: <strong>{order.destination || '-'}</strong></div>
             </div>
 
-            {/* Progress bar 5 bước */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 15 }}>
               {STATUS_STEPS.map((step, i) => {
                 const currentIdx = STATUS_STEPS.findIndex(s => s.key === order.status)
@@ -228,7 +218,6 @@ function DriverDashboard({ user, onLogout }) {
               })}
             </div>
 
-            {/* Mã Seal */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: 14 }}>🔒 Seal: <strong>{order.sealCode || 'Chưa nhập'}</strong></span>
               {!order.sealCode && (
@@ -246,7 +235,6 @@ function DriverDashboard({ user, onLogout }) {
               )}
             </div>
 
-            {/* Upload chứng từ */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
               {[
                 { key: 'deliveryReceipt', label: '📄 Biên bản giao nhận' },
@@ -265,7 +253,6 @@ function DriverDashboard({ user, onLogout }) {
               ))}
             </div>
 
-            {/* Nút chuyển bước */}
             {getNextStatus(order.status) && (
               <button onClick={() => handleNextStatus(order.id, order.status)}
                 style={{
@@ -276,7 +263,6 @@ function DriverDashboard({ user, onLogout }) {
               </button>
             )}
 
-            {/* Nút xem bản đồ tĩnh OpenStreetMap */}
             <button onClick={() => setShowMapForOrderId(showMapForOrderId === order.id ? null : order.id)}
               style={{
                 width: '100%', padding: '10px', background: '#2980b9', color: 'white',
@@ -285,14 +271,12 @@ function DriverDashboard({ user, onLogout }) {
               🗺️ {showMapForOrderId === order.id ? 'Đóng Bản Đồ Chuyến Đi' : 'Xem Đường Đi Tối Ưu Mới Nhất'}
             </button>
 
-            {/* Khung hiển thị RouteMap nội bộ (Miễn phí 100%) */}
             {showMapForOrderId === order.id && (
               <RouteMap origin={order.sourceWarehouse || 'Hải Phòng, Việt Nam'} destination={order.destination || 'Hải Phòng, Việt Nam'} />
             )}
           </div>
         ))}
 
-        {/* Lịch sử đã hoàn thành */}
         {completedOrders.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <h3>✅ Đã hoàn thành ({completedOrders.length})</h3>
@@ -354,9 +338,12 @@ function DriverDashboard({ user, onLogout }) {
           marginTop: 12, padding: '10px 24px', background: '#27ae60', color: 'white',
           border: 'none', borderRadius: 6, fontWeight: 'bold', cursor: 'pointer'
         }}>💾 Ghi nhận chi phí</button>
+        <button type="button" onClick={() => setShowOCR(true)} style={{
+          marginTop: 12, marginLeft: 8, padding: '10px 24px', background: '#7c3aed', color: 'white',
+          border: 'none', borderRadius: 6, fontWeight: 'bold', cursor: 'pointer'
+        }}>🔬 Quét ảnh biên lai (OCR)</button>
       </form>
 
-      {/* Lịch sử chi phí */}
       <h3>📋 Lịch sử chi phí</h3>
       {expenses.length === 0 ? <p style={{ color: '#999' }}>Chưa có khoản chi phí nào.</p> :
         expenses.map(exp => (
@@ -419,7 +406,6 @@ function DriverDashboard({ user, onLogout }) {
         }}>🆘 GỬI BÁO CÁO KHẨN CẤP</button>
       </form>
 
-      {/* Lịch sử SOS */}
       <h3>📋 Lịch sử báo cáo</h3>
       {sosReports.length === 0 ? <p style={{ color: '#999' }}>Chưa có báo cáo SOS nào.</p> :
         sosReports.map(sos => (
@@ -448,58 +434,51 @@ function DriverDashboard({ user, onLogout }) {
   )
 
   const renderStats = () => {
-    const completedOrders = orders.filter(o => o.status === 'completed')
-    const totalKm = completedOrders.reduce((sum, o) => sum + (Number(o.distance) || 0), 0)
-    const totalExpenseApproved = expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
-    const estimatedSalary = completedOrders.length * 500000 // Ước tính 500k/chuyến
+    const completed = orders.filter(o => o.status === 'completed')
+    const totalTrips = completed.length
+    const totalKm = completed.reduce((s, o) => s + (Number(o.distance) || 0), 0)
+    const totalExpenses = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+    const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((s, e) => s + (Number(e.amount) || 0), 0)
+    const estimatedSalary = totalTrips * 500000
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2 style={{ margin: 0 }}>📊 Thống Kê Cá Nhân</h2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 15 }}>
-          <div style={{ background: '#eaf2f8', padding: 20, borderRadius: 8, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 'bold', color: '#2980b9' }}>{completedOrders.length}</div>
-            <div>Chuyến đã hoàn thành</div>
-          </div>
-          <div style={{ background: '#eafaf1', padding: 20, borderRadius: 8, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 'bold', color: '#27ae60' }}>{totalKm.toLocaleString()} km</div>
-            <div>Tổng quãng đường</div>
-          </div>
-          <div style={{ background: '#fef9e7', padding: 20, borderRadius: 8, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 'bold', color: '#f39c12' }}>{estimatedSalary.toLocaleString()}đ</div>
-            <div>Dự kiến thù lao</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          {[
+            { icon: '🚚', label: 'Tổng số chuyến', value: totalTrips, color: '#3498db' },
+            { icon: '🛣️', label: 'Tổng km', value: totalKm.toLocaleString() + ' km', color: '#27ae60' },
+            { icon: '💰', label: 'Lương dự kiến', value: estimatedSalary.toLocaleString() + '₫', color: '#f39c12' },
+            { icon: '💸', label: 'Tổng chi phí', value: totalExpenses.toLocaleString() + '₫', color: '#e74c3c' },
+            { icon: '✅', label: 'Chi phí đã duyệt', value: approvedExpenses.toLocaleString() + '₫', color: '#2ecc71' },
+            { icon: '📝', label: 'Báo cáo SOS', value: sosReports.length, color: '#9b59b6' },
+          ].map((s, i) => (
+            <div key={i} style={{
+              background: 'white', padding: 18, borderRadius: 10, textAlign: 'center',
+              borderLeft: '4px solid ' + s.color, boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+            }}>
+              <div style={{ fontSize: 28 }}>{s.icon}</div>
+              <div style={{ fontSize: 22, fontWeight: 'bold', color: s.color, margin: '4px 0' }}>{s.value}</div>
+              <div style={{ fontSize: 12, color: '#888' }}>{s.label}</div>
+            </div>
+          ))}
         </div>
 
-        <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0 }}>💸 Chi phí đã được duyệt</h3>
-          <p style={{ fontSize: 20, fontWeight: 'bold', color: '#e74c3c' }}>{totalExpenseApproved.toLocaleString()}đ</p>
-        </div>
-
-        <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0 }}>📅 Lịch sử chuyến gần đây</h3>
-          {completedOrders.length === 0 ? <p style={{ color: '#999' }}>Chưa có.</p> :
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #eee' }}>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Điểm giao</th>
-                  <th>Hàng</th>
-                  <th>Lít</th>
-                  <th>Xe</th>
-                </tr>
-              </thead>
-              <tbody>
-                {completedOrders.map(o => (
-                  <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ padding: 8 }}>{o.destination}</td>
-                    <td style={{ textAlign: 'center' }}>{o.product}</td>
-                    <td style={{ textAlign: 'center' }}>{Number(o.amount).toLocaleString()}</td>
-                    <td style={{ textAlign: 'center' }}>{o.vehiclePlate}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div style={{ background: 'white', padding: 20, borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h3 style={{ marginTop: 0 }}>📅 Lịch Sử Chuyến Gần Đây</h3>
+          {completed.length === 0 ? <p style={{ color: '#999' }}>Chưa hoàn thành chuyến nào.</p> :
+            completed.slice(-10).reverse().map(o => (
+              <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <div>
+                  <strong>{o.destination}</strong>
+                  <div style={{ fontSize: 12, color: '#888' }}>{o.product} — {Number(o.amount).toLocaleString()}L</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 12, color: '#27ae60', fontWeight: 'bold' }}>{o.vehiclePlate}</div>
+                  <div style={{ fontSize: 11, color: '#999' }}>{o.completedAt ? new Date(o.completedAt).toLocaleDateString('vi-VN') : '✔️ Hoàn thành'}</div>
+                </div>
+              </div>
+            ))
           }
         </div>
       </div>
@@ -545,6 +524,19 @@ function DriverDashboard({ user, onLogout }) {
           {renderContent()}
         </div>
       </div>
+
+      <OCRScanner isOpen={showOCR} onClose={() => setShowOCR(false)} mode="receipt"
+        onResult={(data) => {
+          setExpenseForm(prev => ({
+            ...prev,
+            type: data.type || prev.type,
+            amount: data.amount || data.total || prev.amount,
+            description: data.description || prev.description,
+          }))
+          setActiveMenu('expenses')
+          alert('✅ Đã điền dữ liệu từ OCR vào form chi phí!')
+        }}
+      />
     </div>
   )
 }

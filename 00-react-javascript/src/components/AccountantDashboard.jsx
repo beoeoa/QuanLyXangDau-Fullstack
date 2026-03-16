@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './Dashboard.css'
 import { verifyUserRole } from '../services/authService'
-import { getAllDeliveryOrders } from '../services/transportationService'
+import { getAllDeliveryOrders, updateOrderApproval } from '../services/transportationService'
 import { getAllExpenses, updateExpenseStatus } from '../services/driverExpenseService'
 import { getAllOrders } from '../services/orderService'
 import { getAllCustomers } from '../services/customerService'
@@ -16,11 +16,21 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement)
 
+import DateRangeFilter, { filterByDate } from './shared/DateRangeFilter'
+import { exportPhieuChi, exportBangLuong, exportBienBanHaoHut, exportDeNghiThanhToan, exportUyNhiemChi, exportPnLExcel } from './shared/ExportTemplates'
+import ImportDataModal from './shared/ImportDataModal'
+import OCRScanner from './shared/OCRScanner'
+
 function AccountantDashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('overview')
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [filterMonth, setFilterMonth] = useState('')  // Bộ lọc tháng cho báo cáo
+  const [filterFrom, setFilterFrom] = useState(null)
+  const [filterTo, setFilterTo] = useState(null)
+  const [showImportExpenses, setShowImportExpenses] = useState(false)
+  const [showOCR, setShowOCR] = useState(false)
+  const [showOCRVAT, setShowOCRVAT] = useState(false)
+  const [showOCRUNC, setShowOCRUNC] = useState(false)
 
   const [deliveryOrders, setDeliveryOrders] = useState([])
   const [expenses, setExpenses] = useState([])
@@ -485,6 +495,21 @@ function AccountantDashboard({ user, onLogout }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2>💰 Công Nợ Phải Thu (AR)</h2>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button onClick={() => setShowOCRUNC(true)}
+            style={{ padding: '6px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            📸 Quét UNC Ngân hàng
+          </button>
+          <button onClick={() => {
+            const custName = prompt('Nhập tên khách hàng để in Bảng Kê Đòi Nợ:')
+            if (!custName) return
+            const cust = customers.find(c => c.name?.toLowerCase().includes(custName.toLowerCase()))
+            const trips = deliveryOrders.filter(o => o.status === 'completed' && (o.destination?.toLowerCase().includes(custName.toLowerCase())))
+            exportDeNghiThanhToan(cust || { name: custName }, trips)
+          }} style={{ padding: '6px 12px', background: '#1a237e', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            📄 In Bảng Kê Đòi Nợ (ĐNTT)
+          </button>
+        </div>
         <p style={{ color: '#666' }}>Các chuyến đã giao thành công — chờ xuất hóa đơn và thu tiền.</p>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <thead><tr style={{ background: '#f5f5f5' }}>
@@ -532,7 +557,24 @@ function AccountantDashboard({ user, onLogout }) {
 
   const renderAP = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
       <h2>💸 Chi Phí Vận Hành & Phải Trả (AP)</h2>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={() => setShowImportExpenses(true)}
+          style={{ padding: '6px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+          📥 Import Excel
+        </button>
+        <button onClick={() => setShowOCR(true)}
+          style={{ padding: '6px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+          🔬 Quét OCR biên lai
+        </button>
+        <button onClick={() => setShowOCRVAT(true)}
+          style={{ padding: '6px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+          🧉 Quét HĐ VAT mua xăng
+        </button>
+      </div>
+    </div>
+    <DateRangeFilter compact onFilter={(from, to) => { setFilterFrom(from); setFilterTo(to) }} />
       <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
         <thead><tr style={{ background: '#f5f5f5' }}>
           <th style={{ padding: 10, textAlign: 'left' }}>Tài xế</th><th>Loại</th><th>Mô tả</th><th>Tiền (₫)</th><th>Ảnh</th><th>Trạng thái</th><th>Duyệt</th>
@@ -561,6 +603,12 @@ function AccountantDashboard({ user, onLogout }) {
                     <button onClick={() => handleApproveExpense(e.id, 'rejected')}
                       style={{ padding: '3px 8px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>❌ Từ chối</button>
                   </>
+                )}
+                {e.status === 'approved' && (
+                  <button onClick={() => exportPhieuChi(e)}
+                    style={{ padding: '3px 8px', background: '#3498db', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginTop: 4 }}>
+                    📄 In Phiếu Chi
+                  </button>
                 )}
               </td>
             </tr>
@@ -591,6 +639,27 @@ function AccountantDashboard({ user, onLogout }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2>💳 Tính Lương & Thưởng/Phạt Tài Xế</h2>
+      <button onClick={() => {
+        const completed = deliveryOrders.filter(o => o.status === 'completed')
+        const payrollData = drivers.map(d => {
+          const trips = completed.filter(o => o.assignedDriverId === d.id)
+          const tripCount = trips.length
+          const totalKm = trips.reduce((s, o) => s + (Number(o.distance) || 0), 0)
+          const baseSalary = tripCount * 500000
+          const fuelBonus = trips.reduce((s, o) => {
+            const loss = Number(o.fuelLoss) || 0
+            const allowed = Number(o.allowedLoss) || 0.5
+            if (loss > allowed) return s - (loss - allowed) * 100000
+            if (loss < allowed) return s + (allowed - loss) * 50000
+            return s
+          }, 0)
+          return { ...d, tripCount, totalKm, baseSalary, fuelBonus, total: baseSalary + fuelBonus }
+        }).filter(d => d.tripCount > 0)
+        exportBangLuong(payrollData)
+      }}
+        style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, marginBottom: 10 }}>
+        📄 In Bảng Lương
+      </button>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <thead><tr style={{ background: '#f5f5f5' }}>
             <th style={{ padding: 10, textAlign: 'left' }}>Tài xế</th><th>Số chuyến</th><th>Tổng km</th><th>Lương (₫)</th><th>Thưởng/Phạt</th><th>Tổng</th>
@@ -617,38 +686,81 @@ function AccountantDashboard({ user, onLogout }) {
   }
 
   // ==== ĐỐI SOÁT ====
+  const handleApproveTrip = async (id, status) => {
+    let note = ''
+    if (status === 'rejected') {
+      note = prompt('Nhập lý do từ chối:')
+      if (!note) return
+    } else {
+      if (!window.confirm('Xác nhận CỨNG dữ liệu chuyến này vào Công nợ?')) return
+    }
+    await updateOrderApproval(id, status, note)
+    loadAll()
+  }
+
   const renderReconciliation = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h2>📄 Đối Soát Chứng Từ</h2>
-      <p style={{ color: '#666' }}>So sánh Lệnh điều động vs Biên bản giao nhận thực tế (chứng từ do tài xế upload)</p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-        <thead><tr style={{ background: '#f5f5f5' }}>
-          <th style={{ padding: 10, textAlign: 'left' }}>Đại lý</th><th>Xe</th><th>Seal</th><th>Biên bản</th><th>Phiếu hao hụt</th><th>Phiếu XK</th><th>Trạng thái</th>
-        </tr></thead>
-        <tbody>
-          {deliveryOrders.filter(o => o.status === 'completed').map(o => {
-            const docs = o.documents || {}
-            const hasAll = docs.deliveryReceipt && docs.lossReport && docs.exportSlip
-            return (
-              <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <td style={{ padding: 10 }}>{o.destination}</td>
-                <td style={{ textAlign: 'center' }}>{o.vehiclePlate}</td>
-                <td style={{ textAlign: 'center' }}>{o.sealCode || '❓'}</td>
-                <td style={{ textAlign: 'center' }}>{docs.deliveryReceipt ? <img src={docs.deliveryReceipt} alt="" style={{ width: 35, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : '❌'}</td>
-                <td style={{ textAlign: 'center' }}>{docs.lossReport ? <img src={docs.lossReport} alt="" style={{ width: 35, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : '❌'}</td>
-                <td style={{ textAlign: 'center' }}>{docs.exportSlip ? <img src={docs.exportSlip} alt="" style={{ width: 35, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : '❌'}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <span style={{
-                    padding: '3px 8px', borderRadius: 10, fontSize: 11, fontWeight: 'bold',
-                    background: hasAll ? '#d4edda' : '#f8d7da',
-                    color: hasAll ? '#155724' : '#721c24'
-                  }}>{hasAll ? '✅ Đủ' : '⚠️ Thiếu'}</span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <h2>📄 Đối Soát Lượng Giao & Chứng Từ</h2>
+      <p style={{ color: '#666' }}>Kế toán kiểm tra chứng từ tài xế đưa lên. Định mức hao hụt 0.5%.</p>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ minWidth: 1000, borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <thead><tr style={{ background: '#f5f5f5' }}>
+            <th style={{ padding: 10, textAlign: 'left' }}>Đại lý</th>
+            <th>Lít XK</th><th>Lít giao</th><th>Hao hụt (L)</th><th>Tỷ lệ</th>
+            <th>Chứng từ</th><th>Duyệt (Kế toán)</th><th>In phiếu</th>
+          </tr></thead>
+          <tbody>
+            {deliveryOrders.filter(o => o.status === 'completed' || o.approvalStatus).map(o => {
+              const docs = o.documents || {}
+              const hasAll = docs.deliveryReceipt && docs.lossReport && docs.exportSlip
+              const xuatKho = Number(o.amount || 0)
+              const thucGiao = Number(o.deliveredQuantity || o.amount || 0)
+              const haoHutLt = xuatKho - thucGiao
+              const tyLeHaoHut = xuatKho > 0 ? (haoHutLt / xuatKho) * 100 : 0
+              const isOverLimit = tyLeHaoHut > 0.5
+              return (
+                <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0', background: o.approvalStatus === 'approved' ? '#f8fff9' : o.approvalStatus === 'rejected' ? '#fffafa' : 'white' }}>
+                  <td style={{ padding: 10 }}><strong>{o.destination}</strong><br/><span style={{fontSize:11,color:'#666'}}>Xe: {o.vehiclePlate}</span></td>
+                  <td style={{ textAlign: 'center' }}>{xuatKho.toLocaleString()}</td>
+                  <td style={{ textAlign: 'center', fontWeight:'bold', color:'#1a237e' }}>{thucGiao.toLocaleString()}</td>
+                  <td style={{ textAlign: 'center', color: haoHutLt > 0 ? '#e67e22' : '#333' }}>{haoHutLt.toLocaleString()}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{ padding:'3px 6px', borderRadius:4, fontWeight:'bold', background: isOverLimit?'#fee2e2':'#eafaf1', color: isOverLimit?'#dc2626':'#27ae60' }}>
+                      {tyLeHaoHut.toFixed(2)}%
+                    </span>
+                    {isOverLimit && <div style={{ fontSize:10, color:'#dc2626', marginTop:4 }}>Vượt định mức 0.5%!</div>}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
+                      {docs.exportSlip ? <span title="Phiếu XK">📝</span> : <span title="Thiếu Phiếu XK">⚠️</span>}
+                      {docs.deliveryReceipt ? <span title="Biên bản giao">📝</span> : <span title="Thiếu Biên bản">⚠️</span>}
+                      {docs.lossReport ? <span title="BB Hao hụt">📝</span> : <span title="Thiếu BB Hao hụt">⚠️</span>}
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    {o.approvalStatus === 'approved' ? (
+                      <span style={{ color:'#27ae60', fontWeight:'bold' }}>✅ Đã chốt</span>
+                    ) : o.approvalStatus === 'rejected' ? (
+                      <span style={{ color:'#c0392b', fontWeight:'bold' }}>❌ Từ chối</span>
+                    ) : (
+                      <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
+                        <button onClick={() => handleApproveTrip(o.id, 'approved')} disabled={!hasAll}
+                          style={{ padding:'4px 8px', background: hasAll?'#27ae60':'#bdc3c7', color:'white', border:'none', borderRadius:4, cursor: hasAll?'pointer':'not-allowed', fontSize:11 }}>✔️ Duyệt</button>
+                        <button onClick={() => handleApproveTrip(o.id, 'rejected')}
+                          style={{ padding:'4px 8px', background:'#e74c3c', color:'white', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>❌ Từ chối</button>
+                      </div>
+                    )}
+                    {o.approvalNote && <div style={{ fontSize:10, color:'#c0392b', fontStyle:'italic', marginTop:4 }}>Lý do: {o.approvalNote}</div>}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button onClick={() => exportBienBanHaoHut(o)} style={{ padding:'4px 8px', background:'#f39c12', color:'white', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>📄 BB Hao hụt</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 
@@ -693,7 +805,18 @@ function AccountantDashboard({ user, onLogout }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <h2>📈 Báo Cáo Tài Chính</h2>
-          <button onClick={handleExportCSV} style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>📥 Xuất CSV</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={handleExportCSV} style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>📥 Xuất CSV</button>
+            <button onClick={() => {
+              const totalRevenue = completed.reduce((s, o) => s + (Number(o.amount) || 0) * 20000, 0)
+              const expByType = {}
+              approvedExpenses.forEach(e => {
+                const t = e.type === 'BOT' ? 'bot' : e.type === 'fuel' ? 'fuel' : e.type === 'repair' ? 'repair' : 'other'
+                expByType[t] = (expByType[t] || 0) + Number(e.amount || 0)
+              })
+              exportPnLExcel(totalRevenue, expByType)
+            }} style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>📊 Xuất P&L Excel</button>
+          </div>
         </div>
 
         {/* KPI */}
@@ -782,6 +905,30 @@ function AccountantDashboard({ user, onLogout }) {
         </div>
         <div className="main-content">{renderContent()}</div>
       </div>
+
+      <ImportDataModal isOpen={showImportExpenses} onClose={() => setShowImportExpenses(false)} title="Chi Phí"
+        columns={[
+          { key: 'driverName', label: 'Tài xế', required: true },
+          { key: 'type', label: 'Loại', required: true },
+          { key: 'amount', label: 'Số tiền', required: true },
+          { key: 'description', label: 'Mô tả' },
+        ]}
+        templateData={[{ driverName: 'Nguyễn Văn A', type: 'BOT', amount: 150000, description: 'Trạm Pháp Vân' }]}
+        onImport={async (rows) => { alert('Đã import ' + rows.length + ' dòng!'); loadAll() }}
+      />
+      <OCRScanner isOpen={showOCR} onClose={() => setShowOCR(false)} mode="receipt"
+        onResult={(data) => { alert('OCR: ' + (data.type||'') + ' - ' + (data.amount||data.total||0).toLocaleString() + 'd') }}
+      />
+      <OCRScanner isOpen={showOCRVAT} onClose={() => setShowOCRVAT(false)} mode="vat_invoice"
+        onResult={(data) => {
+          alert('HD VAT: ' + (data.sellerName||'N/A') + ' | MST: ' + (data.sellerMST||'N/A') + ' | SL: ' + (data.quantity||0).toLocaleString() + 'L | Tong: ' + (data.grandTotal||0).toLocaleString() + 'd')
+        }}
+      />
+      <OCRScanner isOpen={showOCRUNC} onClose={() => setShowOCRUNC(false)} mode="bank_transfer"
+        onResult={(data) => {
+          alert('UNC: ' + (data.sender||'N/A') + ' | So tien: ' + (data.amount||0).toLocaleString() + 'd | Noi dung: ' + (data.content||'N/A'))
+        }}
+      />
     </div>
   )
 }

@@ -15,6 +15,7 @@ const notificationService = require('../services/notificationService');
 const fuelPriceScraper = require('../services/fuelPriceScraper');
 const shipmentService = require('../services/shipmentService');
 const driverScheduleService = require('../services/driverScheduleService');
+const routeService = require('../services/routeService');
 
 // ===========================
 // AUTH / USERS
@@ -445,6 +446,15 @@ const updateOrderSeal = async (req, res) => {
     }
 };
 
+const updateOrderApproval = async (req, res) => {
+    try {
+        const result = await transportationService.updateOrderApproval(req.params.id, req.body.approvalStatus, req.body.approvalNote);
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
 // ===========================
 // DRIVER EXPENSES
 // ===========================
@@ -567,7 +577,10 @@ const deleteOrderCtrl = async (req, res) => {
 // ===========================
 const getPricesCtrl = async (req, res) => {
     try { res.json(await priceService.getAllPrices()); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const addPriceCtrl = async (req, res) => {
     try { res.json(await priceService.addPrice(req.body)); }
@@ -583,7 +596,10 @@ const deletePriceCtrl = async (req, res) => {
 };
 const getCurrentPriceCtrl = async (req, res) => {
     try { res.json(await priceService.getCurrentPrice(req.params.product)); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 
 // ===========================
@@ -591,7 +607,10 @@ const getCurrentPriceCtrl = async (req, res) => {
 // ===========================
 const getContractsCtrl = async (req, res) => {
     try { res.json(await contractService.getAllContracts()); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const addContractCtrl = async (req, res) => {
     try { res.json(await contractService.addContract(req.body)); }
@@ -615,11 +634,17 @@ const createNotifCtrl = async (req, res) => {
 };
 const getNotifByUserCtrl = async (req, res) => {
     try { res.json(await notificationService.getNotificationsByUser(req.params.userId)); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const getNotifByRoleCtrl = async (req, res) => {
     try { res.json(await notificationService.getNotificationsByRole(req.params.role)); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const markNotifReadCtrl = async (req, res) => {
     try { res.json(await notificationService.markAsRead(req.params.id)); }
@@ -639,7 +664,10 @@ const syncFuelPricesCtrl = async (req, res) => {
 };
 const getSyncMetaCtrl = async (req, res) => {
     try { res.json(await fuelPriceScraper.getSyncMeta()); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 
 // ===========================
@@ -647,7 +675,10 @@ const getSyncMetaCtrl = async (req, res) => {
 // ===========================
 const getShipmentsCtrl = async (req, res) => {
     try { res.json(await shipmentService.getAllShipments()); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const createShipmentCtrl = async (req, res) => {
     try { res.json(await shipmentService.createShipment(req.body)); }
@@ -663,7 +694,10 @@ const deleteShipmentCtrl = async (req, res) => {
 };
 const getShipmentsByDriverCtrl = async (req, res) => {
     try { res.json(await shipmentService.getShipmentsByDriver(req.params.driverId)); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const getGovWarehousesCtrl = async (req, res) => {
     res.json(shipmentService.GOV_WAREHOUSES);
@@ -674,7 +708,10 @@ const getGovWarehousesCtrl = async (req, res) => {
 // ===========================
 const getDriverSchedulesCtrl = async (req, res) => {
     try { res.json(await driverScheduleService.getAllSchedules()); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
 };
 const addDriverScheduleCtrl = async (req, res) => {
     try { res.json(await driverScheduleService.createSchedule(req.body)); }
@@ -690,7 +727,39 @@ const deleteDriverScheduleCtrl = async (req, res) => {
 };
 const getSchedulesByDriverCtrl = async (req, res) => {
     try { res.json(await driverScheduleService.getSchedulesByDriver(req.params.driverId)); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ===========================
+// ROUTES (Đường đi)
+// ===========================
+const saveRouteCtrl = async (req, res) => {
+    try { res.json(await routeService.saveRoute(req.body)); }
+    catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
+const getRouteCtrl = async (req, res) => {
+    try {
+        const route = await routeService.getRouteById(req.params.id);
+        if (!route) return res.status(404).json({ error: 'Không tìm thấy đường đi' });
+        res.json(route);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+const getUserRoutesCtrl = async (req, res) => {
+    try { res.json(await routeService.getRoutesByUserId(req.params.userId)); }
+    catch (e) {
+        console.error('Error in getNotifByUserCtrl:', e);
+        res.status(500).json({ error: e.message });
+    }
+};
+
+const deleteRouteCtrl = async (req, res) => {
+    try { res.json(await routeService.deleteRoute(req.params.id)); }
+    catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
 module.exports = {
@@ -708,7 +777,7 @@ module.exports = {
     getTransactions, createTransaction, deleteTransaction,
     getVehicles, addVehicle, createDeliveryOrder,
     getOrdersByDriver, updateOrderStatus,
-    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderSeal,
+    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderSeal, updateOrderApproval,
     getDriverTripStatsCtrl, getAllDriverTripStatsCtrl,
     // Audit Logs
     getAuditLogsCtrl, createAuditLog,
@@ -731,5 +800,7 @@ module.exports = {
     // Shipments
     getShipmentsCtrl, createShipmentCtrl, updateShipmentCtrl, deleteShipmentCtrl, getShipmentsByDriverCtrl, getGovWarehousesCtrl,
     // Driver Schedules
-    getDriverSchedulesCtrl, addDriverScheduleCtrl, updateDriverScheduleCtrl, deleteDriverScheduleCtrl, getSchedulesByDriverCtrl
+    getDriverSchedulesCtrl, addDriverScheduleCtrl, updateDriverScheduleCtrl, deleteDriverScheduleCtrl, getSchedulesByDriverCtrl,
+    // Routes
+    saveRouteCtrl, getRouteCtrl, getUserRoutesCtrl, deleteRouteCtrl
 };

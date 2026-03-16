@@ -103,6 +103,19 @@ export const updateOrderSeal = async (orderId, sealCode) => {
     }
 };
 
+export const updateOrderApproval = async (orderId, approvalStatus, approvalNote = '') => {
+    try {
+        const res = await fetch(`${API_URL}/delivery-orders/${orderId}/approval`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approvalStatus, approvalNote })
+        });
+        return await res.json();
+    } catch (error) {
+        return { success: false, message: error.message };
+    }
+};
+
 export default {
     getAllVehicles,
     addVehicle,
@@ -111,5 +124,6 @@ export default {
     getAllDeliveryOrders,
     updateOrderStatus,
     updateOrderDocuments,
-    updateOrderSeal
+    updateOrderSeal,
+    updateOrderApproval
 };

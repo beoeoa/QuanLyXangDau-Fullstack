@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import {
     getAllVehicles,
     addVehicle,
-    createDeliveryOrder
+    createDeliveryOrder,
+    getAllDeliveryOrders
 } from '../../services/transportationService'
 import { getUsersByRole } from '../../services/userService'
 import './AdminModules.css'
@@ -10,6 +11,7 @@ import './AdminModules.css'
 function TransportationManager() {
     const [vehicles, setVehicles] = useState([])
     const [drivers, setDrivers] = useState([])
+    const [activeOrders, setActiveOrders] = useState([])
     const [showVehicleForm, setShowVehicleForm] = useState(false)
     const [showOrderForm, setShowOrderForm] = useState(false)
 
@@ -35,12 +37,14 @@ function TransportationManager() {
     }, [])
 
     const loadData = async () => {
-        const [vList, dList] = await Promise.all([
+        const [vList, dList, oList] = await Promise.all([
             getAllVehicles(),
-            getUsersByRole('driver')
+            getUsersByRole('driver'),
+            getAllDeliveryOrders()
         ])
         setVehicles(vList)
         setDrivers(dList)
+        setActiveOrders(oList.filter(o => o.status !== 'completed' && o.status !== 'cancelled'))
     }
 
     const handleAddVehicle = async (e) => {
@@ -137,7 +141,9 @@ function TransportationManager() {
                                 required
                             >
                                 <option value="">Chọn Tài xế</option>
-                                {drivers.map(d => <option key={d.id} value={d.id}>{d.fullname}</option>)}
+                                {drivers
+                                    .filter(d => !activeOrders.some(o => o.assignedDriverId === d.id))
+                                    .map(d => <option key={d.id} value={d.id}>{d.fullname} (Rảnh)</option>)}
                             </select>
                             <select
                                 value={newOrder.vehiclePlate}
@@ -145,7 +151,9 @@ function TransportationManager() {
                                 required
                             >
                                 <option value="">Chọn Xe</option>
-                                {vehicles.map(v => <option key={v.id} value={v.plate}>{v.plate}</option>)}
+                                {vehicles
+                                    .filter(v => v.status === 'available' && !activeOrders.some(o => o.vehiclePlate === v.plate))
+                                    .map(v => <option key={v.id} value={v.plate}>{v.plate} (Rảnh)</option>)}
                             </select>
                             <input
                                 placeholder="Điểm đến"

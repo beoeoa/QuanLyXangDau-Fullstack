@@ -16,13 +16,15 @@
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
+    "axios": "^1.13.6",
     "chart.js": "^4.5.1",
     "firebase": "^12.10.0",
     "leaflet": "^1.9.4",
     "react": "18.3.1",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "18.3.1",
-    "react-leaflet": "^4.2.1"
+    "react-leaflet": "^4.2.1",
+    "trackasia-gl": "^2.0.1"
   },
   "devDependencies": {
     "@types/react": "18.3.3",

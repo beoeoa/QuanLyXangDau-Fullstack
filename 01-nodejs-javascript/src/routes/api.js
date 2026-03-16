@@ -17,7 +17,7 @@ const {
     // Transportation
     getVehicles, addVehicle, createDeliveryOrder,
     getOrdersByDriver, updateOrderStatus,
-    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderSeal,
+    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderSeal, updateOrderApproval,
     // Audit Logs
     getAuditLogsCtrl, createAuditLog,
     // Fleet Vehicles
@@ -41,7 +41,9 @@ const {
     // Driver Schedules
     getDriverSchedulesCtrl, addDriverScheduleCtrl, updateDriverScheduleCtrl, deleteDriverScheduleCtrl, getSchedulesByDriverCtrl,
     // Driver Trip Stats (Automated)
-    getDriverTripStatsCtrl, getAllDriverTripStatsCtrl
+    getDriverTripStatsCtrl, getAllDriverTripStatsCtrl,
+    // Routes
+    saveRouteCtrl, getRouteCtrl, getUserRoutesCtrl, deleteRouteCtrl
 } = require('../controllers/apiController');
 
 // ===========================
@@ -100,6 +102,7 @@ routerAPI.get('/delivery-orders/driver/:driverId', getOrdersByDriver);
 routerAPI.put('/delivery-orders/:id/status', updateOrderStatus);
 routerAPI.put('/delivery-orders/:id/documents', updateOrderDocuments);
 routerAPI.put('/delivery-orders/:id/seal', updateOrderSeal);
+routerAPI.put('/delivery-orders/:id/approval', updateOrderApproval);
 routerAPI.get('/delivery-orders/driver-stats/:driverId', getDriverTripStatsCtrl);
 routerAPI.get('/delivery-orders/all-stats', getAllDriverTripStatsCtrl);
 
@@ -192,5 +195,13 @@ routerAPI.post('/driver-schedules', addDriverScheduleCtrl);
 routerAPI.put('/driver-schedules/:id', updateDriverScheduleCtrl);
 routerAPI.delete('/driver-schedules/:id', deleteDriverScheduleCtrl);
 routerAPI.get('/driver-schedules/driver/:driverId', getSchedulesByDriverCtrl);
+
+// ===========================
+// ROUTES (Đường đi)
+// ===========================
+routerAPI.post('/routes', saveRouteCtrl);
+routerAPI.get('/routes/:id', getRouteCtrl);
+routerAPI.get('/routes/user/:userId', getUserRoutesCtrl);
+routerAPI.delete('/routes/:id', deleteRouteCtrl);
 
 module.exports = routerAPI;

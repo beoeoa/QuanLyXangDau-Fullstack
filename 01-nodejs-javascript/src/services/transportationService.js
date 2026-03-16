@@ -140,6 +140,17 @@ const getAllDriverTripStats = async () => {
     return trips;
 };
 
+// Kế toán phê duyệt (Maker-Checker)
+const updateOrderApproval = async (orderId, approvalStatus, approvalNote = '') => {
+    await db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId).update({
+        approvalStatus,
+        approvalNote,
+        approvedAt: new Date(),
+        updatedAt: new Date()
+    });
+    return { success: true };
+};
+
 module.exports = {
     getAllVehicles,
     addVehicle,
@@ -150,5 +161,6 @@ module.exports = {
     updateOrderDocuments,
     updateOrderSeal,
     getDriverTripStats,
-    getAllDriverTripStats
+    getAllDriverTripStats,
+    updateOrderApproval
 };

@@ -18,13 +18,23 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend,
 import ContractManager from './sales/ContractManager'
 import NotificationBell from './NotificationBell'
 import DriverScheduleManager from './admin/DriverScheduleManager'
+import DateRangeFilter, { filterByDate } from './shared/DateRangeFilter'
+import { exportPhieuXuatKho, exportLenhDieuXe, exportHopDongNguyenTac } from './shared/ExportTemplates'
+import ImportDataModal from './shared/ImportDataModal'
+import OCRScanner from './shared/OCRScanner'
 
 function SalesDashboard({ user, onLogout }) {
     const [activeMenu, setActiveMenu] = useState('overview')
     const [loading, setLoading] = useState(true)
     const [sidebarOpen, setSidebarOpen] = useState(false)
-    const [filterDateFrom, setFilterDateFrom] = useState('')
-    const [filterDateTo, setFilterDateTo] = useState('')
+    const [filterDateFrom, setFilterDateFrom] = useState(null)
+    const [filterDateTo, setFilterDateTo] = useState(null)
+
+    // Import & OCR states
+    const [showImportOrders, setShowImportOrders] = useState(false)
+    const [showImportCustomers, setShowImportCustomers] = useState(false)
+    const [showOCR, setShowOCR] = useState(false)
+    const [showOCRGPDKKD, setShowOCRGPDKKD] = useState(false)
 
     // Data states
     const [customers, setCustomers] = useState([])
@@ -456,12 +466,22 @@ function SalesDashboard({ user, onLogout }) {
 
     const renderCRM = () => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <h2>👤 Quản Lý Khách Hàng (CRM)</h2>
-                <button onClick={() => { setShowCustForm(!showCustForm); setEditingCust(null); setCustForm({ name: '', address: '', contact: '', phone: '' }) }}
-                    style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-                    {showCustForm ? '✕ Đóng' : '+ Thêm Đại lý'}
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => setShowImportCustomers(true)}
+                        style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                        📥 Import Excel
+                    </button>
+                    <button onClick={() => setShowOCRGPDKKD(true)}
+                        style={{ padding: '8px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                        📸 Quét GPĐKKD
+                    </button>
+                    <button onClick={() => { setShowCustForm(!showCustForm); setEditingCust(null); setCustForm({ name: '', address: '', contact: '', phone: '' }) }}
+                        style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                        {showCustForm ? '✕ Đóng' : '+ Thêm Đại lý'}
+                    </button>
+                </div>
             </div>
 
             {showCustForm && (
@@ -512,6 +532,8 @@ function SalesDashboard({ user, onLogout }) {
                             <td style={{ textAlign: 'center' }}>
                                 <button onClick={() => handleEditCust(c)}
                                     style={{ padding: '4px 10px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, marginRight: 4 }}>✏️ Sửa</button>
+                                <button onClick={() => exportHopDongNguyenTac(c)}
+                                    style={{ padding: '4px 10px', background: '#1a237e', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, marginRight: 4 }}>📄 HĐNT</button>
                                 <button onClick={() => handleDeleteCust(c.id)}
                                     style={{ padding: '4px 10px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>🗑️ Xóa</button>
                             </td>
@@ -711,14 +733,27 @@ function SalesDashboard({ user, onLogout }) {
         }
     }
 
-    const renderDispatch = () => (
+    const renderDispatch = () => {
+        const active = deliveryOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
+
+        return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h2>🚛 Lệnh Điều Động (Dispatching)</h2>
 
-            <button onClick={() => setShowDispatchForm(!showDispatchForm)}
-                style={{ alignSelf: 'flex-start', padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-                {showDispatchForm ? '✕ Đóng' : '+ Tạo lệnh mới'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button onClick={() => setShowDispatchForm(!showDispatchForm)}
+                    style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                    {showDispatchForm ? '✕ Đóng' : '+ Tạo lệnh mới'}
+                </button>
+                <button onClick={() => setShowImportOrders(true)}
+                    style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                    📥 Import Đơn hàng Excel
+                </button>
+                <button onClick={() => setShowOCR(true)}
+                    style={{ padding: '8px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                    🔬 Quét OCR
+                </button>
+            </div>
 
             {showDispatchForm && (
                 <form onSubmit={handleDispatch} style={{ background: '#f9f9f9', padding: 20, borderRadius: 8 }}>
@@ -756,7 +791,9 @@ function SalesDashboard({ user, onLogout }) {
                                 }}
                                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
                                 <option value="">-- Chọn --</option>
-                                {drivers.map(d => <option key={d.id} value={d.id}>{d.fullname} ({d.phone || 'N/A'})</option>)}
+                                {drivers
+                                    .filter(d => !active.some(o => o.assignedDriverId === d.id))
+                                    .map(d => <option key={d.id} value={d.id}>{d.fullname} (Rảnh)</option>)}
                             </select>
                         </div>
                         <div>
@@ -800,7 +837,8 @@ function SalesDashboard({ user, onLogout }) {
                 </tbody>
             </table>
         </div>
-    )
+        )
+    }
 
     // ==== THEO DÕI ====
     const renderTracking = () => {
@@ -873,6 +911,84 @@ function SalesDashboard({ user, onLogout }) {
                 </div>
                 <div className="main-content">{renderContent()}</div>
             </div>
+
+            {/* Import Đơn hàng Modal */}
+            <ImportDataModal
+                isOpen={showImportOrders}
+                onClose={() => setShowImportOrders(false)}
+                title="Đơn Hàng"
+                columns={[
+                    { key: 'customerName', label: 'Tên khách hàng', required: true },
+                    { key: 'product', label: 'Sản phẩm', required: true },
+                    { key: 'quantity', label: 'Số lượng (Lít)', required: true },
+                    { key: 'requestDate', label: 'Ngày yêu cầu' },
+                    { key: 'notes', label: 'Ghi chú' },
+                ]}
+                templateData={[{ customerName: 'Đại lý ABC', product: 'Dầu Diesel 0.05S', quantity: 10000, requestDate: '2024-01-15', notes: 'Giao gấp' }]}
+                onImport={async (rows) => {
+                    for (const row of rows) {
+                        const cust = customers.find(c => c.name === row.customerName)
+                        await createOrder({ customerId: cust?.id || '', customerName: row.customerName, product: row.product, quantity: row.quantity, requestDate: row.requestDate, notes: row.notes, status: 'pending' })
+                    }
+                    alert(`✅ Đã import ${rows.length} đơn hàng!`)
+                    loadAll()
+                }}
+            />
+
+            {/* Import Khách hàng Modal */}
+            <ImportDataModal
+                isOpen={showImportCustomers}
+                onClose={() => setShowImportCustomers(false)}
+                title="Khách Hàng"
+                columns={[
+                    { key: 'name', label: 'Tên khách hàng', required: true },
+                    { key: 'address', label: 'Địa chỉ' },
+                    { key: 'contact', label: 'Người liên hệ' },
+                    { key: 'phone', label: 'Số điện thoại' },
+                ]}
+                templateData={[{ name: 'Đại lý Petrolimex Hải Phòng', address: '123 Lạch Tray', contact: 'Nguyễn Văn A', phone: '0912345678' }]}
+                onImport={async (rows) => {
+                    for (const row of rows) { await addCustomer(row) }
+                    alert(`✅ Đã import ${rows.length} khách hàng!`)
+                    loadAll()
+                }}
+            />
+
+            {/* OCR Scanner */}
+            <OCRScanner
+                isOpen={showOCR}
+                onClose={() => setShowOCR(false)}
+                mode="order"
+                onResult={(data) => {
+                    setOrderForm(prev => ({
+                        ...prev,
+                        customerName: data.customerName || prev.customerName,
+                        product: data.product || prev.product,
+                        quantity: data.quantity || prev.quantity,
+                        notes: data.description || prev.notes,
+                    }))
+                    setShowOrderForm(true)
+                    alert('✅ Đã điền dữ liệu từ OCR! Vui lòng kiểm tra và lưu.')
+                }}
+            />
+
+            {/* OCR GPĐKKD Scanner */}
+            <OCRScanner
+                isOpen={showOCRGPDKKD}
+                onClose={() => setShowOCRGPDKKD(false)}
+                mode="gpdkkd"
+                onResult={(data) => {
+                    setCustForm(prev => ({
+                        ...prev,
+                        name: data.companyName || prev.name,
+                        address: data.address || prev.address,
+                        phone: data.phone || prev.phone,
+                        contact: data.representative || prev.contact,
+                    }))
+                    setShowCustForm(true)
+                    alert('✅ Đã điền thông tin từ GPĐKKD! Vui lòng kiểm tra và lưu.')
+                }}
+            />
         </div>
     )
 }
