@@ -22,3 +22,4 @@
 - [2026-03-16] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Dựng bảng dữ liệu (DataGrid) quản lý khách hàng doanh nghiệp
 - [2026-03-17] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Dựng giao diện Dashboard tổng quan cho Admin
 - [2026-03-17] Trà My <myy8037@gmail.com> hoàn thành: Tích hợp API lấy danh sách kho lên giao diện bán hàng
+- [2026-03-18] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Giao diện Kế toán: Tính năng đối soát hóa đơn VAT
