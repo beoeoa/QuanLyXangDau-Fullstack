@@ -27,3 +27,4 @@
 - [2026-03-19] Trà My <myy8037@gmail.com> hoàn thành: Xử lý logic hiển thị trạng thái đơn hàng (Pending, Delivering, Done)
 - [2026-03-20] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Làm màn hình báo cáo Lợi nhuận gộp từng chuyến xe
 - [2026-03-20] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: App Tài xế: Tích hợp Google Sign-in và Firebase Auth
+- [2026-03-21] Trà My <myy8037@gmail.com> hoàn thành: Làm tính năng in phiếu xuất kho dạng PDF
