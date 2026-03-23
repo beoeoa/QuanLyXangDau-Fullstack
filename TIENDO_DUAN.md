@@ -30,3 +30,4 @@
 - [2026-03-21] Trà My <myy8037@gmail.com> hoàn thành: Làm tính năng in phiếu xuất kho dạng PDF
 - [2026-03-22] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Tính năng lọc và xuất Excel báo cáo công nợ
 - [2026-03-22] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Tích hợp Mapbox vào App di động để theo dõi vị trí xe
+- [2026-03-23] Trà My <myy8037@gmail.com> hoàn thành: Ghép luồng: Đơn hàng duyệt xong tự động đẩy thông báo cho Admin điều xe
