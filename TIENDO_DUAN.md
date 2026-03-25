@@ -35,3 +35,4 @@
 - [2026-03-24] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: App Tài xế: Sửa lỗi văng app khi mất mạng (Cấu hình Offline Mode)
 - [2026-03-24] Trà My <myy8037@gmail.com> hoàn thành: Fix bug: Số lượng tồn kho bị âm khi Sale lên đơn trùng lúc
 - [2026-03-25] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Tối ưu hóa câu query lấy báo cáo tài chính, thêm index cho Firebase
+- [2026-03-25] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Fix bug URL: Xóa hậu tố -1 ở Frontend để kết nối đúng Backend
