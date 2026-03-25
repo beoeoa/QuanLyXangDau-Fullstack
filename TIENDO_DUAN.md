@@ -34,3 +34,4 @@
 - [2026-03-23] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Ghép luồng: Tính tổng chi phí đổ xăng, cầu đường vào giá vốn chuyến đi
 - [2026-03-24] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: App Tài xế: Sửa lỗi văng app khi mất mạng (Cấu hình Offline Mode)
 - [2026-03-24] Trà My <myy8037@gmail.com> hoàn thành: Fix bug: Số lượng tồn kho bị âm khi Sale lên đơn trùng lúc
+- [2026-03-25] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Tối ưu hóa câu query lấy báo cáo tài chính, thêm index cho Firebase
