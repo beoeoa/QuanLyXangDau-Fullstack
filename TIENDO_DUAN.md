@@ -36,3 +36,4 @@
 - [2026-03-24] Trà My <myy8037@gmail.com> hoàn thành: Fix bug: Số lượng tồn kho bị âm khi Sale lên đơn trùng lúc
 - [2026-03-25] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Tối ưu hóa câu query lấy báo cáo tài chính, thêm index cho Firebase
 - [2026-03-25] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Fix bug URL: Xóa hậu tố -1 ở Frontend để kết nối đúng Backend
+- [2026-03-26] Trà My <myy8037@gmail.com> hoàn thành: Hoàn thiện Validate form nhập liệu bán hàng
