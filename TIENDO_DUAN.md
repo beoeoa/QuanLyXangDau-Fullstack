@@ -37,3 +37,4 @@
 - [2026-03-25] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Tối ưu hóa câu query lấy báo cáo tài chính, thêm index cho Firebase
 - [2026-03-25] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Fix bug URL: Xóa hậu tố -1 ở Frontend để kết nối đúng Backend
 - [2026-03-26] Trà My <myy8037@gmail.com> hoàn thành: Hoàn thiện Validate form nhập liệu bán hàng
+- [2026-03-26] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Hoàn thiện phân quyền: Kế toán không được xóa chứng từ đã duyệt
