@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const QUICK_FILTERS = [
   { key: 'today', label: 'Hôm nay' },
@@ -35,15 +35,24 @@ function getRange(key) {
   }
 }
 
-export function filterByDate(items, dateField, from, to) {
+export function filterByDate(items, dateFields, from, to) {
   if (!from && !to) return items
+  const fields = Array.isArray(dateFields) ? dateFields : [dateFields]
   return items.filter(item => {
-    const raw = item[dateField]
+    let raw;
+    for (const field of fields) {
+      if (item[field]) {
+        raw = item[field];
+        break;
+      }
+    }
     if (!raw) return false
+    
     let d
     if (raw?._seconds) d = new Date(raw._seconds * 1000)
     else if (raw?.toDate) d = raw.toDate()
     else d = new Date(raw)
+    
     if (isNaN(d)) return false
     if (from && d < from) return false
     if (to && d > to) return false
@@ -52,10 +61,16 @@ export function filterByDate(items, dateField, from, to) {
 }
 
 export default function DateRangeFilter({ onFilter, compact }) {
-  const [active, setActive] = useState('all')
+  const [active, setActive] = useState('today')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [showCustom, setShowCustom] = useState(false)
+  
+  // Auto-fire "Hôm nay" trên lần mount đầu tiên một cách đúng chuẩn
+  useEffect(() => {
+    const { from, to } = getRange('today')
+    onFilter(from, to)
+  }, [])
 
   const handleQuick = (key) => {
     setActive(key)

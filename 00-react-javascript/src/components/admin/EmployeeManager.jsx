@@ -4,6 +4,8 @@ import {
     updateUser,
     deleteUser
 } from '../../services/userService'
+import { logAudit } from '../../services/auditLogService'
+import { sendAppNotification } from '../../services/notificationService'
 import Profile from '../Profile'
 import './AdminModules.css'
 
@@ -118,6 +120,7 @@ function EmployeeManager() {
     const [statsDriver, setStatsDriver] = useState(null)
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('pending') // 'pending', 'approved'
+    const [searchTerm, setSearchTerm] = useState('')
     const [editingUser, setEditingUser] = useState(null) // State mở Modal sửa user
 
     useEffect(() => {
@@ -139,6 +142,8 @@ function EmployeeManager() {
 
         if (result.success) {
             alert('✅ Đã duyệt tài khoản thành công!')
+            await logAudit('UPDATE', `Duyệt cấp quyền [${role}] cho user ID: ${userId}`)
+            await sendAppNotification({ userId, title: 'Tài khoản được duyệt', message: `Bạn đã chính thức tham gia hệ thống với vai trò: ${role}.`, type: 'system' })
             loadUsers()
         } else {
             alert('❌ Lỗi: ' + result.message)
@@ -149,6 +154,7 @@ function EmployeeManager() {
         if (window.confirm('Bạn có chắc chắn muốn từ chối và xóa tài khoản này?')) {
             const result = await deleteUser(userId)
             if (result.success) {
+                await logAudit('DELETE', `Từ chối/Xóa tài khoản user ID: ${userId}`)
                 loadUsers()
             } else {
                 alert('❌ Lỗi: ' + result.message)
@@ -160,6 +166,8 @@ function EmployeeManager() {
         if (window.confirm(`Xác nhận đổi role thành ${newRole}?`)) {
             const result = await updateUser(userId, { role: newRole })
             if (result.success) {
+                await logAudit('UPDATE', `Đổi quyền thành [${newRole}] cho user ID: ${userId}`)
+                await sendAppNotification({ userId, title: 'Cập nhật phân quyền', message: `Quản trị viên đã thay đổi quyền hạn của bạn thành: ${newRole}.`, type: 'system' })
                 loadUsers()
             } else {
                 alert('❌ Lỗi: ' + result.message)
@@ -168,38 +176,77 @@ function EmployeeManager() {
     }
 
     const handleExportExcel = () => {
-        // Tạo tiêu đề CSV
-        const headers = ['Mã NV', 'Họ Tên', 'Email', 'SĐT', 'Vai trò', 'Lương cơ bản'];
-        const csvRows = [];
-        csvRows.push(headers.join(','));
+        // Kỹ thuật xuất HTML Table sang XLS để nhúng được CSS (Màu sắc, in đậm) và ép kiểu (Format Number/Text)
+        const tableHtml = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="utf-8" />
+                <style>
+                    table { border-collapse: collapse; font-family: Arial, sans-serif; }
+                    th { background-color: #1a4f8b; color: #ffffff; font-weight: bold; border: 1px solid #ddd; padding: 10px; text-align: center; }
+                    td { border: 1px solid #ddd; padding: 8px; vertical-align: middle; }
+                    /* mso-number-format:"\\@" là lệnh bắt buộc Excel hiểu đây là Chuỗi (Text), chống lỗi xoá số 0 ở đầu SĐT hoặc lỗi E+ */
+                    .text { mso-number-format:"\\@"; } 
+                    .money { mso-number-format:"\\#\\,\\#\\#0"; }
+                    .center { text-align: center; }
+                    .header-title { font-size: 24px; font-weight: bold; color: #1a4f8b; text-align: left; }
+                </style>
+            </head>
+            <body>
+                <table>
+                    <tr><td colspan="13" class="header-title">DANH SÁCH NHÂN SỰ TOÀN HỆ THỐNG</td></tr>
+                    <tr><td colspan="13">Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}</td></tr>
+                    <tr><td colspan="13"></td></tr>
+                    <tr>
+                        <th>STT</th>
+                        <th>Mã NV</th>
+                        <th>Họ và Tên</th>
+                        <th>Giới tính</th>
+                        <th>Ngày sinh</th>
+                        <th>Số CCCD</th>
+                        <th>SĐT</th>
+                        <th>Email</th>
+                        <th>Thường trú</th>
+                        <th>Vai trò</th>
+                        <th>N.Vào Làm</th>
+                        <th>Lương Căn Bản</th>
+                        <th>Thông tin Thanh toán</th>
+                    </tr>
+                    ${approvedUsers.map((user, index) => `
+                        <tr>
+                            <td class="center">${index + 1}</td>
+                            <td class="center text">${user.employeeId || 'Chưa cấp'}</td>
+                            <td><b>${user.fullname || 'Chưa cập nhật'}</b></td>
+                            <td class="center">${user.gender || ''}</td>
+                            <td class="center">${user.dob || ''}</td>
+                            <td class="text center">${user.cccd || ''}</td>
+                            <td class="text center">${user.phone || ''}</td>
+                            <td>${user.email || ''}</td>
+                            <td>${user.permanentAddress || user.address || ''}</td>
+                            <td class="center">${getRoleName(user.role)}</td>
+                            <td class="center text">${user.startDate || ''}</td>
+                            <td class="money">${user.baseSalary || 0}</td>
+                            <td>${user.bankName ? `[${user.bankName}] ${user.bankAccountNumber || ''} - ${user.bankAccountName || ''}` : ''}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </body>
+            </html>
+        `;
 
-        // Thêm dữ liệu từng user
-        approvedUsers.forEach(user => {
-            const row = [
-                user.employeeId || '',
-                `"${user.fullname || ''}"`,
-                user.email || '',
-                `"${user.phone || ''}"`,
-                getRoleName(user.role),
-                user.baseSalary || ''
-            ];
-            csvRows.push(row.join(','));
-        });
-
-        // Kèm BOM UTF-8 để Excel đọc tiếng Việt có dấu tốt
-        const csvContent = '\uFEFF' + csvRows.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'Danh_sach_nhan_vien.csv');
+        link.href = url;
+        link.download = `Ho_So_Nhan_Su_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xls`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 
-    const pendingUsers = users.filter(u => u.isApproved === false && u.role !== 'admin')
-    const approvedUsers = users.filter(u => u.isApproved !== false) // Includes those without isApproved field (legacy admins)
+    const pendingUsers = users.filter(u => u.isApproved === false && u.role !== 'admin' && (!searchTerm || (u.fullname && u.fullname.toLowerCase().includes(searchTerm.toLowerCase())) || (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) || (u.phone && u.phone.includes(searchTerm))))
+    const approvedUsers = users.filter(u => u.isApproved !== false && (!searchTerm || (u.fullname && u.fullname.toLowerCase().includes(searchTerm.toLowerCase())) || (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) || (u.phone && u.phone.includes(searchTerm)) || (u.employeeId && String(u.employeeId).toLowerCase().includes(searchTerm.toLowerCase()))))
 
     const getRoleBadgeClass = (role) => {
         switch (role) {
@@ -228,30 +275,43 @@ function EmployeeManager() {
                 <h2>👥 Quản lý Nhân Viên</h2>
             </div>
 
-            <div className="tabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="tabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div>
                     <button
                         className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`}
                         onClick={() => setActiveTab('pending')}
                     >
-                        Chờ Duyệt ({pendingUsers.length})
+                        Chờ Duyệt ({users.filter(u => u.isApproved === false && u.role !== 'admin').length})
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'approved' ? 'active' : ''}`}
                         onClick={() => setActiveTab('approved')}
                     >
-                        Nhân Viên ({approvedUsers.length})
+                        Nhân Viên ({users.filter(u => u.isApproved !== false).length})
                     </button>
                 </div>
-                {activeTab === 'approved' && (
-                    <button
-                        className="btn-success"
-                        onClick={handleExportExcel}
-                        style={{ padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}
-                    >
-                        📥 Xuất Excel
-                    </button>
-                )}
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', padding: '6px 12px', borderRadius: 6, border: '1px solid #ccc', minWidth: 250 }}>
+                        <span>🔍</span>
+                        <input 
+                            type="text" 
+                            placeholder="Tìm Tên, Email, Mã NV..." 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13 }} 
+                        />
+                    </div>
+                    {activeTab === 'approved' && (
+                        <button
+                            className="btn-success"
+                            onClick={handleExportExcel}
+                            style={{ padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}
+                        >
+                            📥 Xuất Excel
+                        </button>
+                    )}
+                </div>
             </div>
 
             {loading ? (

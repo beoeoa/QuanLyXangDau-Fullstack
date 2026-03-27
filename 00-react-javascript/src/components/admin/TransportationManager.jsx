@@ -23,13 +23,10 @@ function TransportationManager() {
         fuelConsumption: 0
     })
 
-    // New Order State
     const [newOrder, setNewOrder] = useState({
         assignedDriverId: '',
         vehiclePlate: '',
-        destination: '',
-        product: '',
-        amount: 0
+        items: [{ product: '', amount: '', compartment: '', destination: '' }]
     })
 
     useEffect(() => {
@@ -59,10 +56,27 @@ function TransportationManager() {
 
     const handleCreateOrder = async (e) => {
         e.preventDefault()
-        const res = await createDeliveryOrder(newOrder)
+
+        const validItems = (newOrder.items || []).filter(i => i.product && i.amount)
+        if (validItems.length === 0) {
+            alert('Vui lòng nhập ít nhất 1 mặt hàng!')
+            return
+        }
+
+        const uniqueDests = [...new Set(validItems.map(i => i.destination).filter(Boolean))]
+
+        const res = await createDeliveryOrder({
+            ...newOrder,
+            destination: uniqueDests.join(' | '),
+            items: validItems,
+            product: validItems.map(i => i.product).join(', '),
+            amount: validItems.reduce((sum, i) => sum + Number(i.amount), 0)
+        })
         if (res.success) {
             alert('Đã tạo lệnh giao hàng!')
             setShowOrderForm(false)
+            setNewOrder({ assignedDriverId: '', vehiclePlate: '', items: [{ product: '', amount: '', compartment: '', destination: '' }] })
+            loadData()
         }
     }
 
@@ -155,12 +169,38 @@ function TransportationManager() {
                                     .filter(v => v.status === 'available' && !activeOrders.some(o => o.vehiclePlate === v.plate))
                                     .map(v => <option key={v.id} value={v.plate}>{v.plate} (Rảnh)</option>)}
                             </select>
-                            <input
-                                placeholder="Điểm đến"
-                                value={newOrder.destination}
-                                onChange={e => setNewOrder({ ...newOrder, destination: e.target.value })}
-                                required
-                            />
+                            <div style={{ marginBottom: 16, marginTop: 12 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <label style={{ fontWeight: 'bold', fontSize: 13 }}>Gán Mặt Hàng & Đại lý Nhận (Khách)</label>
+                                    <button type="button" onClick={() => setNewOrder({ ...newOrder, items: [...(newOrder.items || []), { product: '', amount: '', compartment: '', destination: '' }] })}
+                                        className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>+ Thêm Điểm/Hầm</button>
+                                </div>
+                                {(newOrder.items || []).map((item, idx) => (
+                                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 2fr 2fr 40px', gap: 10, marginBottom: 8, alignItems: 'center', background: '#f5f5f5', padding: 8, borderRadius: 6, border: '1px solid #ddd' }}>
+                                        <input type="text" placeholder="Hầm K1" value={item.compartment}
+                                            onChange={e => {
+                                                const n = [...newOrder.items]; n[idx].compartment = e.target.value; setNewOrder({ ...newOrder, items: n })
+                                            }} style={{ margin: 0 }} />
+                                        <input type="text" required placeholder="Điểm đến (Đại lý)" value={item.destination}
+                                            onChange={e => {
+                                                const n = [...newOrder.items]; n[idx].destination = e.target.value; setNewOrder({ ...newOrder, items: n })
+                                            }} style={{ margin: 0 }} />
+                                        <input type="text" required placeholder="Tên hàng" value={item.product}
+                                            onChange={e => {
+                                                const n = [...newOrder.items]; n[idx].product = e.target.value; setNewOrder({ ...newOrder, items: n })
+                                            }} style={{ margin: 0 }} />
+                                        <input type="number" required placeholder="Lít" value={item.amount}
+                                            onChange={e => {
+                                                const n = [...newOrder.items]; n[idx].amount = e.target.value; setNewOrder({ ...newOrder, items: n })
+                                            }} style={{ margin: 0 }} />
+                                        <button type="button" onClick={() => {
+                                            if (newOrder.items.length === 1) return;
+                                            const n = newOrder.items.filter((_, i) => i !== idx); setNewOrder({ ...newOrder, items: n })
+                                        }} style={{ width: 30, height: 30, background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', padding: 0 }}>✕</button>
+                                    </div>
+                                ))}
+                            </div>
+
                             <div className="modal-buttons">
                                 <button type="button" onClick={() => setShowOrderForm(false)}>Hủy</button>
                                 <button type="submit" className="btn-primary">Phát lệnh</button>

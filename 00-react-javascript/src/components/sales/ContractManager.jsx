@@ -1,31 +1,38 @@
 import { useState, useEffect } from 'react'
 import { getAllContracts, addContract, updateContract, deleteContract } from '../../services/contractService'
+import { getAllCustomers } from '../../services/customerService'
 import '../Dashboard.css'
 
-const CONTRACT_TYPES = ['Mua', 'Bán']
-const CONTRACT_STATUSES = ['Hiệu lực', 'Hết hạn', 'Tạm ngưng']
+const CONTRACT_TYPES = ['Bán']
+const CONTRACT_STATUSES = ['Chờ duyệt', 'Hiệu lực', 'Hết hạn', 'Tạm ngưng']
 
 function ContractManager() {
     const [contracts, setContracts] = useState([])
+    const [customers, setCustomers] = useState([])
     const [loading, setLoading] = useState(true)
+    const [searchTerm, setSearchTerm] = useState('')
     const [showForm, setShowForm] = useState(false)
     const [editing, setEditing] = useState(null)
     const [form, setForm] = useState({
-        contractNumber: '', type: 'Mua', customerName: '', product: '',
-        quantity: '', pricePerUnit: '', startDate: '', endDate: '', status: 'Hiệu lực', notes: ''
+        contractNumber: '', type: 'Bán', customerName: '', product: '',
+        quantity: '', pricePerUnit: '', startDate: '', endDate: '', status: 'Chờ duyệt', notes: ''
     })
 
     const load = async () => {
         setLoading(true)
-        const data = await getAllContracts()
-        setContracts(Array.isArray(data) ? data : [])
+        const [contractsData, customersData] = await Promise.all([
+            getAllContracts(),
+            getAllCustomers()
+        ])
+        setContracts(Array.isArray(contractsData) ? contractsData : [])
+        setCustomers(Array.isArray(customersData) ? customersData : [])
         setLoading(false)
     }
 
     useEffect(() => { load() }, [])
 
     const resetForm = () => {
-        setForm({ contractNumber: '', type: 'Mua', customerName: '', product: '', quantity: '', pricePerUnit: '', startDate: '', endDate: '', status: 'Hiệu lực', notes: '' })
+        setForm({ contractNumber: '', type: 'Bán', customerName: '', product: '', quantity: '', pricePerUnit: '', startDate: '', endDate: '', status: 'Chờ duyệt', notes: '' })
         setEditing(null)
     }
 
@@ -40,11 +47,11 @@ function ContractManager() {
 
     const handleEdit = (c) => {
         setForm({
-            contractNumber: c.contractNumber || '', type: c.type || 'Mua',
+            contractNumber: c.contractNumber || '', type: 'Bán',
             customerName: c.customerName || '', product: c.product || '',
             quantity: c.quantity || '', pricePerUnit: c.pricePerUnit || '',
             startDate: c.startDate || '', endDate: c.endDate || '',
-            status: c.status || 'Hiệu lực', notes: c.notes || ''
+            status: c.status || 'Chờ duyệt', notes: c.notes || ''
         })
         setEditing(c.id)
         setShowForm(true)
@@ -55,6 +62,11 @@ function ContractManager() {
     }
 
     const statusColor = (s) => s === 'Hiệu lực' ? '#27ae60' : s === 'Hết hạn' ? '#e74c3c' : '#f39c12'
+
+    const filteredContracts = contracts.filter(c => c.type === 'Bán' && (!searchTerm ||
+        (c.customerName && c.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.contractNumber && c.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()))
+    ));
 
     if (loading) return <div className="loading-state">Đang tải hợp đồng...</div>
 
@@ -78,13 +90,16 @@ function ContractManager() {
                         </div>
                         <div className="form-group">
                             <label>Loại *</label>
-                            <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                            <select disabled value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
                                 {CONTRACT_TYPES.map(t => <option key={t}>{t}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
-                            <label>Khách hàng / NCC *</label>
-                            <input required value={form.customerName} onChange={e => setForm({ ...form, customerName: e.target.value })} placeholder="Tên đối tác" />
+                            <label>Đại lý (Khách hàng) *</label>
+                            <select required value={form.customerName} onChange={e => setForm({ ...form, customerName: e.target.value })}>
+                                <option value="">-- Chọn Đại Lý --</option>
+                                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </select>
                         </div>
                         <div className="form-group">
                             <label>Sản phẩm</label>
@@ -108,9 +123,10 @@ function ContractManager() {
                         </div>
                         <div className="form-group">
                             <label>Trạng thái</label>
-                            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                            <select disabled value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={{ backgroundColor: '#eeeeee' }}>
                                 {CONTRACT_STATUSES.map(s => <option key={s}>{s}</option>)}
                             </select>
+                            <small style={{ color: '#e67e22', display: 'block', marginTop: 4 }}>* Cần Giám đốc duyệt để kích hoạt</small>
                         </div>
                         <div className="form-group">
                             <label>Ghi chú</label>
@@ -130,15 +146,29 @@ function ContractManager() {
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
                 {[
-                    { label: 'Hợp đồng Mua', value: contracts.filter(c => c.type === 'Mua').length, color: '#3498db' },
-                    { label: 'Hợp đồng Bán', value: contracts.filter(c => c.type === 'Bán').length, color: '#27ae60' },
-                    { label: 'Tổng giá trị', value: contracts.reduce((s, c) => s + (Number(c.quantity || 0) * Number(c.pricePerUnit || 0)), 0).toLocaleString() + '₫', color: '#f39c12' }
+                    { label: 'Hợp đồng Chờ Duyệt', value: contracts.filter(c => c.type === 'Bán' && c.status === 'Chờ duyệt').length, color: '#f39c12' },
+                    { label: 'Hợp đồng Bán (Tổng)', value: contracts.filter(c => c.type === 'Bán').length, color: '#27ae60' },
+                    { label: 'Doanh số dự kiến', value: contracts.filter(c => c.type === 'Bán').reduce((s, c) => s + (Number(c.quantity || 0) * Number(c.pricePerUnit || 0)), 0).toLocaleString() + '₫', color: '#8e44ad' }
                 ].map((s, i) => (
                     <div key={i} style={{ background: 'white', padding: 16, borderRadius: 8, textAlign: 'center', borderLeft: `4px solid ${s.color}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                         <div style={{ fontSize: 22, fontWeight: 'bold', color: s.color }}>{s.value}</div>
                         <div style={{ fontSize: 13, color: '#666' }}>{s.label}</div>
                     </div>
                 ))}
+            </div>
+
+            {/* Thanh tìm kiếm */}
+            <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', padding: '6px 16px', borderRadius: 8, border: '1px solid #ddd', flex: 1, maxWidth: 450, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <span>🔍</span>
+                    <input 
+                        type="text" 
+                        placeholder="Tìm theo Tên đối tác hoặc Số Hợp Đồng..." 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                        style={{ border: 'none', outline: 'none', width: '100%', padding: '6px 0', fontSize: 14 }} 
+                    />
+                </div>
             </div>
 
             <div className="table-responsive">
@@ -152,9 +182,9 @@ function ContractManager() {
                         </tr>
                     </thead>
                     <tbody>
-                        {contracts.length === 0 ? (
-                            <tr><td colSpan="10" style={{ padding: 20, textAlign: 'center', color: '#999' }}>Chưa có hợp đồng nào.</td></tr>
-                        ) : contracts.map(c => (
+                        {filteredContracts.length === 0 ? (
+                            <tr><td colSpan="10" style={{ padding: 20, textAlign: 'center', color: '#999' }}>Chưa có hợp đồng nào phù hợp.</td></tr>
+                        ) : filteredContracts.map(c => (
                             <tr key={c.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                                 <td style={{ padding: 10 }}><strong>{c.contractNumber}</strong></td>
                                 <td style={{ textAlign: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, background: c.type === 'Mua' ? '#cce5ff' : '#d4edda' }}>{c.type}</span></td>

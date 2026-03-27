@@ -3,11 +3,15 @@ import './Dashboard.css'
 import { verifyUserRole } from '../services/authService'
 import { getAllDeliveryOrders, updateOrderApproval } from '../services/transportationService'
 import { getAllExpenses, updateExpenseStatus } from '../services/driverExpenseService'
+import { getAllTransactions, createTransaction } from '../services/transactionService'
 import { getAllOrders } from '../services/orderService'
 import { getAllCustomers } from '../services/customerService'
-import { getAllUsers } from '../services/userService'
+import { getAllUsers, updateUser } from '../services/userService'
 import Profile from './Profile'
 import NotificationBell from './NotificationBell'
+import { logAudit } from '../services/auditLogService'
+import { notifyRole, sendAppNotification } from '../services/notificationService'
+import { LayoutDashboard, Receipt, Wallet, CreditCard, FileCheck, BarChart3, UserCheck, Menu, DollarSign, Package, Truck, TrendingUp, AlertCircle } from 'lucide-react'
 import { Bar, Doughnut } from 'react-chartjs-2'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -18,25 +22,54 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend,
 
 import DateRangeFilter, { filterByDate } from './shared/DateRangeFilter'
 import { exportPhieuChi, exportBangLuong, exportBienBanHaoHut, exportDeNghiThanhToan, exportUyNhiemChi, exportPnLExcel } from './shared/ExportTemplates'
+
+// Khởi tạo Map để cache data orders (giải quyết lỗi chậm/đơ web do O(N*M))
+const ordersCache = new WeakMap();
+
+const getPricing = (orderId, product, reqOrders) => {
+  if (!reqOrders) return { cost: 0, margin: 0, freight: 0, totalUnit: 20700 };
+  let map = ordersCache.get(reqOrders);
+  if (!map) {
+    map = new Map();
+    for (let i = 0; i < reqOrders.length; i++) {
+        map.set(reqOrders[i].id, reqOrders[i]);
+    }
+    ordersCache.set(reqOrders, map);
+  }
+  const o = map.get(orderId) || {};
+  const i = (o.items || []).find(it => it.product === product) || { costPrice: 20000, margin: 500, freight: 200 };
+  return {
+    cost: Number(i.costPrice || 0),
+    margin: Number(i.margin || 0),
+    freight: Number(i.freight || 0),
+    totalUnit: Number(i.costPrice || 20000) + Number(i.margin || 500) + Number(i.freight || 200)
+  };
+}
+
 import ImportDataModal from './shared/ImportDataModal'
-import OCRScanner from './shared/OCRScanner'
+import ARConfirmPaymentModal from './shared/ARConfirmPaymentModal'
 
 function AccountantDashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('overview')
   const [loading, setLoading] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [filterFrom, setFilterFrom] = useState(null)
   const [filterTo, setFilterTo] = useState(null)
   const [showImportExpenses, setShowImportExpenses] = useState(false)
-  const [showOCR, setShowOCR] = useState(false)
-  const [showOCRVAT, setShowOCRVAT] = useState(false)
-  const [showOCRUNC, setShowOCRUNC] = useState(false)
+  const [showConfirmAR, setShowConfirmAR] = useState(false)
+  const [confirmARTrip, setConfirmARTrip] = useState(null)
+
+  // Lương cứng (baseSalary) của tài xế: dùng updateUser để thêm/sửa/xóa
+  const [payrollEditorOpen, setPayrollEditorOpen] = useState(false)
+  const [payrollEditorMode, setPayrollEditorMode] = useState('add') // add | edit
+  const [payrollEditorDriverId, setPayrollEditorDriverId] = useState('')
+  const [payrollEditorBaseSalary, setPayrollEditorBaseSalary] = useState('')
 
   const [deliveryOrders, setDeliveryOrders] = useState([])
   const [expenses, setExpenses] = useState([])
   const [orders, setOrders] = useState([])
   const [customers, setCustomers] = useState([])
   const [drivers, setDrivers] = useState([])
+  const [transactions, setTransactions] = useState([])
 
   useEffect(() => {
     const check = async () => {
@@ -57,14 +90,15 @@ function AccountantDashboard({ user, onLogout }) {
 
   const loadAll = async () => {
     setLoading(true)
-    const [dels, exps, ords, custs, usrs] = await Promise.all([
-      getAllDeliveryOrders(), getAllExpenses(), getAllOrders(), getAllCustomers(), getAllUsers()
+    const [dels, exps, ords, custs, usrs, trans] = await Promise.all([
+      getAllDeliveryOrders(), getAllExpenses(), getAllOrders(), getAllCustomers(), getAllUsers(), getAllTransactions()
     ])
     setDeliveryOrders(Array.isArray(dels) ? dels : [])
     setExpenses(Array.isArray(exps) ? exps : [])
     setOrders(Array.isArray(ords) ? ords : [])
     setCustomers(Array.isArray(custs) ? custs : [])
     setDrivers(Array.isArray(usrs) ? usrs.filter(u => u.role === 'driver') : [])
+    setTransactions(Array.isArray(trans) ? trans : [])
     setLoading(false)
   }
 
@@ -76,7 +110,9 @@ function AccountantDashboard({ user, onLogout }) {
     const now = new Date()
 
     const quantity = Number(order.quantity || 0)
-    const price = 20181.8182 // Giá trước thuế (để khớp ảnh 10.000 * 20.181,8182 = 201.818.182)
+    const item = order.items && order.items.length > 0 ? order.items[0] : { costPrice: 20000, margin: 500, freight: 200 }
+    const unitPriceVAT = Number(item.costPrice || 0) + Number(item.margin || 0) + Number(item.freight || 0) || 22000
+    const price = unitPriceVAT / 1.1 // Giá trước thuế
     const total = quantity * price
     const vat = total * 0.1
     const grandTotal = total + vat
@@ -242,7 +278,9 @@ function AccountantDashboard({ user, onLogout }) {
     const now = new Date()
 
     const quantity = Number(order.quantity || 0)
-    const price = 20181.8182
+    const item = order.items && order.items.length > 0 ? order.items[0] : { costPrice: 20000, margin: 500, freight: 200 }
+    const unitPriceVAT = Number(item.costPrice || 0) + Number(item.margin || 0) + Number(item.freight || 0) || 22000
+    const price = unitPriceVAT / 1.1 // Giá trước thuế
     const total = quantity * price
     const vat = total * 0.1
     const grandTotal = total + vat
@@ -385,13 +423,8 @@ function AccountantDashboard({ user, onLogout }) {
       <div class="sig-title">Người bán hàng</div>
       <div class="sig-note">(Ký, ghi rõ họ, tên)</div>
       
-      <div class="digital-sig">
-        <div class="check">✓</div>
-        <div class="content">
-          <strong>Signature Valid</strong><br>
-          Ký bởi: CÔNG TY CỔ PHẦN BK ENERGY<br>
-          Ký ngày: ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}
-        </div>
+      <div style="border:1px dashed #777; padding:10px; border-radius:6px; font-size:11px; text-align:left; background:#fff;">
+        <strong>Lưu ý:</strong> File này là bản PDF/Print theo template nội bộ để đối chiếu, không tích hợp chữ ký số.
       </div>
     </div>
   </div>
@@ -413,93 +446,228 @@ function AccountantDashboard({ user, onLogout }) {
 
   // ==== TỔNG QUAN ====
   const renderOverview = () => {
-    const completed = deliveryOrders.filter(o => o.status === 'completed')
-    const totalRevenue = completed.reduce((s, o) => s + (Number(o.amount) || 0) * 20000, 0) // Giả định giá 20k/L
-    const totalExpense = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
-    const pendingExpenses = expenses.filter(e => e.status === 'pending')
+    const filteredDeliveries = filterByDate(deliveryOrders, 'updatedAt', filterFrom, filterTo)
+    const completed = filteredDeliveries.filter(o => o.status === 'completed')
+    const filteredExpenses = filterByDate(expenses, 'date', filterFrom, filterTo)
+
+    let totalRev = 0; let totalCostGoods = 0; let totalFreightRev = 0; let totalMarginRev = 0;
+    completed.forEach(o => {
+      const p = getPricing(o.orderId, o.product, orders);
+      const qty = Number(o.amount) || 0;
+      totalRev += qty * p.totalUnit;
+      totalCostGoods += qty * p.cost;
+      totalFreightRev += qty * p.freight;
+      totalMarginRev += qty * p.margin;
+    })
+
+    const totalExpense = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+    // Lợi nhuận ròng = (Lợi nhuận gộp TM + Doanh thu cước) - Tổng chi phí AP
+    const netProfit = (totalMarginRev + totalFreightRev) - totalExpense;
+
+    const pendingExpenses = filteredExpenses.filter(e => e.status === 'pending')
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <h2>📊 Tổng Quan Tài Chính</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15 }}>
-          {[
-            { icon: '💰', label: 'Doanh thu dự kiến', value: `${totalRevenue.toLocaleString()}₫`, color: '#27ae60' },
-            { icon: '💸', label: 'Tổng chi phí', value: `${totalExpense.toLocaleString()}₫`, color: '#e74c3c' },
-            { icon: '📊', label: 'Lợi nhuận gộp', value: `${(totalRevenue - totalExpense).toLocaleString()}₫`, color: '#3498db' },
-            { icon: '⏳', label: 'Chi phí chờ duyệt', value: pendingExpenses.length, color: '#f39c12' },
-          ].map((s, i) => (
-            <div key={i} style={{
-              background: 'white', padding: 20, borderRadius: 8, textAlign: 'center',
-              borderLeft: `4px solid ${s.color}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-            }}>
-              <div style={{ fontSize: 28 }}>{s.icon}</div>
-              <div style={{ fontSize: 24, fontWeight: 'bold', color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 13, color: '#666' }}>{s.label}</div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Tổng Quan Tài Chính</h2>
+          <DateRangeFilter compact onFilter={(from, to) => { setFilterFrom(from); setFilterTo(to) }} />
         </div>
+
+        {/* --- KPI Cards (premium stats-grid) --- */}
+        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+          <div className="stat-card" style={{ borderLeft: '4px solid #27ae60' }}>
+            <div className="stat-icon" style={{ color: '#27ae60' }}><DollarSign size={24} /></div>
+            <div className="stat-info">
+              <h3>Doanh thu</h3>
+              <p className="stat-number">{totalRev.toLocaleString()}đ</p>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: '4px solid #8e44ad' }}>
+            <div className="stat-icon" style={{ color: '#8e44ad' }}><Package size={24} /></div>
+            <div className="stat-info">
+              <h3>Giá vốn hàng</h3>
+              <p className="stat-number">{totalCostGoods.toLocaleString()}đ</p>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: '4px solid #f39c12' }}>
+            <div className="stat-icon" style={{ color: '#f39c12' }}><Truck size={24} /></div>
+            <div className="stat-info">
+              <h3>DT Vận tải</h3>
+              <p className="stat-number">{totalFreightRev.toLocaleString()}đ</p>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: '4px solid #e74c3c' }}>
+            <div className="stat-icon" style={{ color: '#e74c3c' }}><Wallet size={24} /></div>
+            <div className="stat-info">
+              <h3>Chi phí vận hành</h3>
+              <p className="stat-number">{totalExpense.toLocaleString()}đ</p>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: `4px solid ${netProfit >= 0 ? '#3498db' : '#e74c3c'}` }}>
+            <div className="stat-icon" style={{ color: netProfit >= 0 ? '#3498db' : '#e74c3c' }}><TrendingUp size={24} /></div>
+            <div className="stat-info">
+              <h3>Lợi Nhuận Ròng</h3>
+              <p className="stat-number" style={{ color: netProfit >= 0 ? '#3498db' : '#e74c3c' }}>{netProfit.toLocaleString()}đ</p>
+            </div>
+          </div>
+        </div>
+
 
         {/* Biểu đồ doanh thu vs chi phí */}
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
           <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ marginTop: 0 }}>📊 Doanh Thu & Chi Phí Theo Tháng</h3>
+            <h3 style={{ marginTop: 0 }}>Doanh Thu &amp; Chi Phí Theo Tháng</h3>
             {(() => {
               const months = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12']
               const monthlyRev = new Array(12).fill(0)
               const monthlyCost = new Array(12).fill(0)
+
+              // Doanh thu: lấy từ chuyến hoàn thành theo ngày hoàn thành
               completed.forEach(o => {
                 const d = o.updatedAt || o.createdAt
                 if (d) {
+                  const p = getPricing(o.orderId, o.product, orders)
+                  const qty = Number(o.amount) || 0
                   const dt = new Date(d?._seconds ? d._seconds * 1000 : d)
-                  if (!isNaN(dt)) monthlyRev[dt.getMonth()] += (Number(o.amount) || 0) * 20000
+                  if (!isNaN(dt)) {
+                    monthlyRev[dt.getMonth()] += qty * p.totalUnit
+                    // Chi phí giá vốn theo tháng giao hàng
+                    monthlyCost[dt.getMonth()] += qty * p.cost
+                  }
                 }
               })
-              expenses.filter(e => e.status === 'approved').forEach(e => {
+
+              // Chi phí vận hành AP (đã duyệt) theo tháng
+              filteredExpenses.filter(e => e.status === 'approved').forEach(e => {
                 const d = e.date || e.createdAt
                 if (d) {
                   const dt = new Date(d?._seconds ? d._seconds * 1000 : d)
                   if (!isNaN(dt)) monthlyCost[dt.getMonth()] += Number(e.amount) || 0
                 }
               })
-              return <Bar data={{
-                labels: months,
-                datasets: [
-                  { label: 'Doanh thu', data: monthlyRev, backgroundColor: 'rgba(46,204,113,0.7)' },
-                  { label: 'Chi phí', data: monthlyCost, backgroundColor: 'rgba(231,76,60,0.7)' }
-                ]
-              }} options={{ responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, ticks: { callback: v => (v / 1000000).toFixed(0) + 'tr' } } } }} />
+
+              return (
+                <Bar
+                  data={{
+                    labels: months,
+                    datasets: [
+                      { label: 'Doanh thu (Xuất)', data: monthlyRev, backgroundColor: 'rgba(46, 204, 113, 0.7)', borderColor: '#27ae60', borderWidth: 1 },
+                      { label: 'Chi phí (Nhập + AP)', data: monthlyCost, backgroundColor: 'rgba(231, 76, 60, 0.7)', borderColor: '#c0392b', borderWidth: 1 }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() + 'đ' } } }
+                  }}
+                />
+              )
             })()}
           </div>
           <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ marginTop: 0 }}>📈 Cơ cấu Chi phí</h3>
+            <h3 style={{ marginTop: 0 }}>Cơ cấu Chi Phí</h3>
             {(() => {
-              const typeMap = {}
-              expenses.forEach(e => { typeMap[e.type || 'Khác'] = (typeMap[e.type || 'Khác'] || 0) + Number(e.amount || 0) })
-              const labels = Object.keys(typeMap)
-              const data = Object.values(typeMap)
-              if (labels.length === 0) return <p style={{ color: '#999' }}>Chưa có dữ liệu</p>
-              return <Doughnut data={{
-                labels,
-                datasets: [{ data, backgroundColor: ['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#1abc9c', '#2c3e50'] }]
-              }} options={{ responsive: true, plugins: { legend: { position: 'bottom' } } }} />
+              // Xây dựng cơ cấu chi phí từ dữ liệu thực
+              const costMap = {}
+
+              // Tổng lương cứng của tất cả tài xế
+              const totalBaseSalary = drivers.reduce((sum, d) => sum + Number(d.baseSalary || 0), 0);
+              let totalFuelBonus = 0;
+              let totalHaoHut = 0;
+
+              completed.forEach(o => {
+                let fuelBonus = 0;
+                const loss = Number(o.fuelLoss) || 0;
+                const allowed = Number(o.allowedLoss) || 0.5;
+                if (loss > allowed) fuelBonus = - (loss - allowed) * 100000;
+                else if (loss < allowed) fuelBonus = (allowed - loss) * 50000;
+                totalFuelBonus += fuelBonus;
+
+                const p = getPricing(o.orderId, o.product, orders);
+                const xuatKho = Number(o.amount || 0);
+                const thucGiao = Number(o.deliveredQuantity || o.amount || 0);
+                const haoHutLt = xuatKho - thucGiao;
+                if (haoHutLt > 0) {
+                  totalHaoHut += haoHutLt * p.cost;
+                }
+              })
+
+              if (totalCostGoods > 0) costMap['Giá vốn nhập hàng'] = totalCostGoods;
+              if ((totalBaseSalary + totalFuelBonus) > 0) costMap['Nhân sự (Lương/Thưởng)'] = totalBaseSalary + totalFuelBonus;
+              if (totalHaoHut > 0) costMap['Hao hụt hàng hóa'] = totalHaoHut;
+
+              let vehicleCost = 0;
+              let otherCost = 0;
+
+              filteredExpenses.filter(e => e.status === 'approved').forEach(e => {
+                const t = (e.type || '').toLowerCase();
+                const d = (e.description || '').toLowerCase();
+
+                if (t.includes('xăng') || t.includes('dầu') || t.includes('cầu') || t.includes('đường') || t.includes('bot') || t.includes('sửa') || t.includes('bảo dưỡng') || t.includes('xe') || d.includes('xe') || t.includes('phạt')) {
+                  vehicleCost += Number(e.amount || 0);
+                }
+                else if (t.includes('lương') || t.includes('thưởng')) {
+                  costMap['Nhân sự (Lương/Thưởng)'] = (costMap['Nhân sự (Lương/Thưởng)'] || 0) + Number(e.amount || 0);
+                }
+                else {
+                  otherCost += Number(e.amount || 0);
+                }
+              })
+
+              if (vehicleCost > 0) costMap['Chi phí Xe (Xăng, Cầu đường, Sửa chữa)'] = vehicleCost;
+              if (otherCost > 0) costMap['Chi phí Khác'] = otherCost;
+
+              const labels = Object.keys(costMap)
+              const data = Object.values(costMap)
+
+              if (labels.length === 0) return <p style={{ color: '#999' }}>Chưa có dữ liệu chi phí</p>
+
+              return (
+                <Doughnut
+                  data={{
+                    labels,
+                    datasets: [{
+                      data,
+                      backgroundColor: ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#1abc9c', '#2c3e50', '#27ae60']
+                    }]
+                  }}
+                  options={{ responsive: true, plugins: { legend: { position: 'bottom' } } }}
+                />
+              )
             })()}
           </div>
         </div>
+
       </div>
     )
   }
 
+
   // ==== CÔNG NỢ PHẢI THU (AR) ====
   const renderAR = () => {
     const completed = deliveryOrders.filter(o => o.status === 'completed')
+
+    const getTripARAmount = (trip) => {
+      const p = getPricing(trip.orderId, trip.product, orders)
+      return (Number(trip.amount || 0) * p.totalUnit) || 0
+    }
+
+    const getTripInvoiceStatus = (trip) => {
+      const issued = transactions.some(t => t.type === 'ar_invoice_issued' && t.tripId === trip.id)
+      if (!issued) return { status: 'Draft', color: '#64748b' }
+      const total = getTripARAmount(trip)
+      const paid = transactions
+        .filter(t => t.type === 'ar_payment' && t.tripId === trip.id)
+        .reduce((s, t) => s + (Number(t.amount || t.totalAmount || 0) || 0), 0)
+      if (paid <= 0) return { status: 'Issued', color: '#1d4ed8' }
+      if (paid < total) return { status: 'Partially Paid', color: '#f59e0b' }
+      return { status: 'Paid', color: '#059669' }
+    }
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2>💰 Công Nợ Phải Thu (AR)</h2>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => setShowOCRUNC(true)}
-            style={{ padding: '6px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-            📸 Quét UNC Ngân hàng
-          </button>
           <button onClick={() => {
             const custName = prompt('Nhập tên khách hàng để in Bảng Kê Đòi Nợ:')
             if (!custName) return
@@ -513,18 +681,26 @@ function AccountantDashboard({ user, onLogout }) {
         <p style={{ color: '#666' }}>Các chuyến đã giao thành công — chờ xuất hóa đơn và thu tiền.</p>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <thead><tr style={{ background: '#f5f5f5' }}>
-            <th style={{ padding: 10, textAlign: 'left' }}>Đại lý</th><th>Hàng</th><th>Lít</th><th>Ước tính (₫)</th><th>Xe</th><th>Tài xế</th><th>Hành động</th>
+            <th style={{ padding: 10, textAlign: 'left' }}>Đại lý</th><th>Hàng</th><th>Lít</th><th>Ước tính (₫)</th><th>Trạng thái</th><th>Xe</th><th>Tài xế</th><th>Hành động</th>
           </tr></thead>
           <tbody>
             {completed.map(o => {
               // Tìm dữ liệu order gốc để lấy thông tin giá/quantity chính xác nếu cần (hiện tại lấy từ deliveryOrder info)
               const originalOrder = orders.find(ord => ord.id === o.orderId) || { customerId: o.destination, product: o.product, quantity: o.amount }
+              const p = getPricing(o.orderId, o.product, orders)
+              const expectedAr = Number(o.amount || 0) * p.totalUnit
+              const inv = getTripInvoiceStatus(o)
               return (
                 <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: 10 }}><strong>{o.destination}</strong></td>
                   <td style={{ textAlign: 'center' }}>{o.product}</td>
                   <td style={{ textAlign: 'center' }}>{Number(o.amount).toLocaleString()}</td>
-                  <td style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold' }}>{(Number(o.amount || 0) * 20000).toLocaleString()}₫</td>
+                  <td style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold' }}>{expectedAr.toLocaleString()}₫</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, color: 'white', background: inv.color }}>
+                      {inv.status}
+                    </span>
+                  </td>
                   <td style={{ textAlign: 'center' }}>{o.vehiclePlate}</td>
                   <td style={{ textAlign: 'center' }}>{o.assignedDriverName || '-'}</td>
                   <td style={{ textAlign: 'center' }}>
@@ -532,9 +708,25 @@ function AccountantDashboard({ user, onLogout }) {
                       style={{ padding: '4px 8px', background: '#3498db', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginRight: 4 }} title="In Phiếu nhập kho (Theo mẫu 01-VT)">
                       📄 Nhập Kho
                     </button>
-                    <button onClick={() => handleExportVATInvoice(originalOrder)}
+                    <button onClick={async () => {
+                      handleExportVATInvoice(originalOrder)
+                      await createTransaction({
+                        type: 'ar_invoice_issued',
+                        tripId: o.id,
+                        orderId: o.orderId,
+                        customerName: o.destination || originalOrder.customerName || '',
+                        amount: expectedAr,
+                        issuedAt: new Date().toISOString(),
+                      })
+                      await logAudit('CREATE', `Xuất hóa đơn AR (Issued) cho chuyến ID: ${o.id}`)
+                      loadAll()
+                    }}
                       style={{ padding: '4px 8px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }} title="In Hóa đơn Giá trị gia tăng (Điện tử)">
                       📄 Hóa Đơn GTGT
+                    </button>
+                    <button onClick={() => { setConfirmARTrip(o); setShowConfirmAR(true) }}
+                      style={{ padding: '4px 8px', background: '#059669', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginLeft: 6 }} title="Split-screen: ảnh UNC + nhập tay">
+                      ✅ Xác nhận thu
                     </button>
                   </td>
                 </tr>
@@ -543,7 +735,10 @@ function AccountantDashboard({ user, onLogout }) {
           </tbody>
         </table>
         <div style={{ padding: 15, background: '#eafaf1', borderRadius: 8, fontWeight: 'bold', textAlign: 'right' }}>
-          Tổng AR: {completed.reduce((s, o) => s + (Number(o.amount || 0) * 20000), 0).toLocaleString()}₫
+          Tổng AR: {completed.reduce((s, o) => {
+            const p = getPricing(o.orderId, o.product, orders);
+            return s + (Number(o.amount || 0) * p.totalUnit);
+          }, 0).toLocaleString()}₫
         </div>
       </div>
     )
@@ -551,30 +746,27 @@ function AccountantDashboard({ user, onLogout }) {
 
   // ==== CHI PHÍ VẬN HÀNH (AP) ====
   const handleApproveExpense = async (id, status) => {
+    const exp = expenses.find(e => e.id === id)
     await updateExpenseStatus(id, status)
+    await logAudit('UPDATE', `Kế toán ${status === 'approved' ? 'duyệt' : 'từ chối'} chi phí ID: ${id}`)
+    if (exp && exp.driverId) {
+      await sendAppNotification({ userId: exp.driverId, title: 'Cập nhật phê duyệt Chi phí', message: `Chi phí "${exp.description}" của bạn đã ${status === 'approved' ? 'được duyệt' : 'bị từ chối'}.`, type: 'expense' })
+    }
     loadAll()
   }
 
   const renderAP = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-      <h2>💸 Chi Phí Vận Hành & Phải Trả (AP)</h2>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => setShowImportExpenses(true)}
-          style={{ padding: '6px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-          📥 Import Excel
-        </button>
-        <button onClick={() => setShowOCR(true)}
-          style={{ padding: '6px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-          🔬 Quét OCR biên lai
-        </button>
-        <button onClick={() => setShowOCRVAT(true)}
-          style={{ padding: '6px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-          🧉 Quét HĐ VAT mua xăng
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <h2>💸 Chi Phí Vận Hành & Phải Trả (AP)</h2>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setShowImportExpenses(true)}
+            style={{ padding: '6px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            📥 Import Excel
+          </button>
+        </div>
       </div>
-    </div>
-    <DateRangeFilter compact onFilter={(from, to) => { setFilterFrom(from); setFilterTo(to) }} />
+      <DateRangeFilter compact onFilter={(from, to) => { setFilterFrom(from); setFilterTo(to) }} />
       <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
         <thead><tr style={{ background: '#f5f5f5' }}>
           <th style={{ padding: 10, textAlign: 'left' }}>Tài xế</th><th>Loại</th><th>Mô tả</th><th>Tiền (₫)</th><th>Ảnh</th><th>Trạng thái</th><th>Duyệt</th>
@@ -625,7 +817,7 @@ function AccountantDashboard({ user, onLogout }) {
       const trips = completed.filter(o => o.assignedDriverId === d.id)
       const tripCount = trips.length
       const totalKm = trips.reduce((s, o) => s + (Number(o.distance) || 0), 0)
-      const baseSalary = tripCount * 500000 // 500k/chuyến
+      const baseSalary = Number(d.baseSalary || 0) // Lương cứng từ hồ sơ Admin điền
       const fuelBonus = trips.reduce((s, o) => {
         const loss = Number(o.fuelLoss) || 0
         const allowed = Number(o.allowedLoss) || 0.5 // % cho phép
@@ -634,39 +826,36 @@ function AccountantDashboard({ user, onLogout }) {
         return s
       }, 0)
       return { ...d, tripCount, totalKm, baseSalary, fuelBonus, total: baseSalary + fuelBonus }
-    }).filter(d => d.tripCount > 0)
+    }).filter(d => Boolean(d.baseSalary) || d.tripCount > 0)
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2>💳 Tính Lương & Thưởng/Phạt Tài Xế</h2>
-      <button onClick={() => {
-        const completed = deliveryOrders.filter(o => o.status === 'completed')
-        const payrollData = drivers.map(d => {
-          const trips = completed.filter(o => o.assignedDriverId === d.id)
-          const tripCount = trips.length
-          const totalKm = trips.reduce((s, o) => s + (Number(o.distance) || 0), 0)
-          const baseSalary = tripCount * 500000
-          const fuelBonus = trips.reduce((s, o) => {
-            const loss = Number(o.fuelLoss) || 0
-            const allowed = Number(o.allowedLoss) || 0.5
-            if (loss > allowed) return s - (loss - allowed) * 100000
-            if (loss < allowed) return s + (allowed - loss) * 50000
-            return s
-          }, 0)
-          return { ...d, tripCount, totalKm, baseSalary, fuelBonus, total: baseSalary + fuelBonus }
-        }).filter(d => d.tripCount > 0)
-        exportBangLuong(payrollData)
-      }}
-        style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, marginBottom: 10 }}>
-        📄 In Bảng Lương
-      </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          <button onClick={() => {
+            exportBangLuong(payrollData)
+          }}
+            style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            📄 In Bảng Lương
+          </button>
+          <button onClick={() => {
+            if (!drivers.length) return alert('Chưa có tài xế.')
+            setPayrollEditorMode('add')
+            setPayrollEditorDriverId(drivers[0].id)
+            setPayrollEditorBaseSalary(String(drivers[0].baseSalary || 0))
+            setPayrollEditorOpen(true)
+          }}
+            style={{ padding: '8px 16px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            ➕ Thêm
+          </button>
+        </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <thead><tr style={{ background: '#f5f5f5' }}>
-            <th style={{ padding: 10, textAlign: 'left' }}>Tài xế</th><th>Số chuyến</th><th>Tổng km</th><th>Lương (₫)</th><th>Thưởng/Phạt</th><th>Tổng</th>
+            <th style={{ padding: 10, textAlign: 'left' }}>Tài xế</th><th>Số chuyến</th><th>Tổng km</th><th>Lương (₫)</th><th>Thưởng/Phạt</th><th>Tổng</th><th>Hành động</th>
           </tr></thead>
           <tbody>
             {payrollData.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: '#999' }}>Chưa có dữ liệu.</td></tr>
+              <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: '#999' }}>Chưa có dữ liệu.</td></tr>
             ) : payrollData.map(d => (
               <tr key={d.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                 <td style={{ padding: 10 }}><strong>{d.fullname || d.email}</strong></td>
@@ -677,6 +866,34 @@ function AccountantDashboard({ user, onLogout }) {
                   {d.fuelBonus >= 0 ? '+' : ''}{d.fuelBonus.toLocaleString()}
                 </td>
                 <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#2980b9' }}>{d.total.toLocaleString()}₫</td>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => {
+                        setPayrollEditorMode('edit')
+                        setPayrollEditorDriverId(d.id)
+                        setPayrollEditorBaseSalary(String(d.baseSalary || 0))
+                        setPayrollEditorOpen(true)
+                      }}
+                      style={{ padding: '4px 8px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>
+                      Sửa
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`Xóa cấu hình lương cứng của ${d.fullname || d.email}? (Sẽ đặt baseSalary về 0)`)) return
+                        const res = await updateUser(d.id, { baseSalary: 0 })
+                        if (res?.success) {
+                          await logAudit('UPDATE', `Xóa lương cứng (baseSalary) tài xế ID: ${d.id}`)
+                          await loadAll()
+                        } else {
+                          alert('Lỗi: ' + (res?.message || 'Không rõ'))
+                        }
+                      }}
+                      style={{ padding: '4px 8px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>
+                      Xóa
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -694,7 +911,18 @@ function AccountantDashboard({ user, onLogout }) {
     } else {
       if (!window.confirm('Xác nhận CỨNG dữ liệu chuyến này vào Công nợ?')) return
     }
+
+    const trip = deliveryOrders.find(o => o.id === id)
     await updateOrderApproval(id, status, note)
+    await logAudit('UPDATE', `Kế toán ${status === 'approved' ? 'ghi nhận' : 'từ chối'} đối soát chuyến ID: ${id}`)
+
+    if (trip) {
+      await notifyRole('admin', { title: 'Đối soát chuyến hoàn tất', message: `Chuyến xe ${trip.vehiclePlate} đã được Kế toán chốt đối soát ${status}.`, type: 'system' })
+      if (trip.assignedDriverId) {
+        await sendAppNotification({ userId: trip.assignedDriverId, title: 'Chốt đối soát', message: `Chuyến hàng ${trip.vehiclePlate} của bạn đã được Kế toán chốt dữ liệu.`, type: 'system' })
+      }
+    }
+
     loadAll()
   }
 
@@ -706,7 +934,8 @@ function AccountantDashboard({ user, onLogout }) {
         <table style={{ minWidth: 1000, borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <thead><tr style={{ background: '#f5f5f5' }}>
             <th style={{ padding: 10, textAlign: 'left' }}>Đại lý</th>
-            <th>Lít XK</th><th>Lít giao</th><th>Hao hụt (L)</th><th>Tỷ lệ</th>
+            <th>Cấu trúc P&L (Lít giao x Đơn giá)</th>
+            <th>Hao hụt (L)</th><th>Tỷ lệ</th>
             <th>Chứng từ</th><th>Duyệt (Kế toán)</th><th>In phiếu</th>
           </tr></thead>
           <tbody>
@@ -718,20 +947,49 @@ function AccountantDashboard({ user, onLogout }) {
               const haoHutLt = xuatKho - thucGiao
               const tyLeHaoHut = xuatKho > 0 ? (haoHutLt / xuatKho) * 100 : 0
               const isOverLimit = tyLeHaoHut > 0.5
+              const p = getPricing(o.orderId, o.product, orders);
+
+              // Tính toán P&L chuyến
+              const doanhThuLoiNhuan = thucGiao * p.margin;
+              const doanhThuCuoc = thucGiao * p.freight;
+              // Chi phí mềm: phí đường bộ, cầu phà... của riêng chuyến do tài xế up lên
+              const tripExpenses = expenses.filter(e => e.type !== 'Lương' && e.description?.includes(o.id) && e.status === 'approved').reduce((s, e) => s + Number(e.amount), 0);
+              const luongTai = 500000;
+              const haoHutCost = haoHutLt > 0 ? haoHutLt * p.cost : 0;
+              const netTripProfit = doanhThuLoiNhuan + (doanhThuCuoc - tripExpenses - luongTai) - haoHutCost;
+
               return (
                 <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0', background: o.approvalStatus === 'approved' ? '#f8fff9' : o.approvalStatus === 'rejected' ? '#fffafa' : 'white' }}>
-                  <td style={{ padding: 10 }}><strong>{o.destination}</strong><br/><span style={{fontSize:11,color:'#666'}}>Xe: {o.vehiclePlate}</span></td>
-                  <td style={{ textAlign: 'center' }}>{xuatKho.toLocaleString()}</td>
-                  <td style={{ textAlign: 'center', fontWeight:'bold', color:'#1a237e' }}>{thucGiao.toLocaleString()}</td>
-                  <td style={{ textAlign: 'center', color: haoHutLt > 0 ? '#e67e22' : '#333' }}>{haoHutLt.toLocaleString()}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{ padding:'3px 6px', borderRadius:4, fontWeight:'bold', background: isOverLimit?'#fee2e2':'#eafaf1', color: isOverLimit?'#dc2626':'#27ae60' }}>
-                      {tyLeHaoHut.toFixed(2)}%
-                    </span>
-                    {isOverLimit && <div style={{ fontSize:10, color:'#dc2626', marginTop:4 }}>Vượt định mức 0.5%!</div>}
+                  <td style={{ padding: 10, minWidth: 150 }}><strong>{o.destination}</strong><br /><span style={{ fontSize: 11, color: '#666' }}>Xe: {o.vehiclePlate}</span></td>
+                  <td style={{ textAlign: 'left', minWidth: 350, fontSize: 13, lineHeight: '1.6' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div style={{ background: '#f8f9fa', padding: 8, borderRadius: 6 }}>
+                        <div style={{ color: '#2980b9' }}><b>Lãi Gộp:</b> {doanhThuLoiNhuan.toLocaleString()}₫</div>
+                        <div style={{ color: '#27ae60' }}><b>Cước Vận Tải:</b> {doanhThuCuoc.toLocaleString()}₫</div>
+                        <div style={{ color: '#8e44ad' }}><b>Tiền Hàng:</b> {(thucGiao * p.cost).toLocaleString()}₫</div>
+                      </div>
+                      <div style={{ background: '#fff5f5', padding: 8, borderRadius: 6 }}>
+                        <div style={{ color: '#c0392b' }}><b>Lương tài xe:</b> -{luongTai.toLocaleString()}₫</div>
+                        <div style={{ color: '#d35400' }}><b>Chi phí khác:</b> -{tripExpenses.toLocaleString()}₫</div>
+                        <div style={{ color: '#c0392b' }}><b>Phạt Hao hụt:</b> -{haoHutCost.toLocaleString()}₫</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 8, textAlign: 'center', fontWeight: 'bold', color: netTripProfit >= 0 ? '#27ae60' : '#c0392b', borderTop: '1px solid #eee', paddingTop: 6 }}>
+                      Lợi Nhuận Ròng Chuyến: {netTripProfit > 0 ? '+' : ''}{netTripProfit.toLocaleString()}₫
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'center', color: haoHutLt > 0 ? '#e67e22' : '#333' }}>
+                    {xuatKho.toLocaleString()} {'->'} <b style={{ color: '#1a237e' }}>{thucGiao.toLocaleString()}</b><br />
+                    Hao: {haoHutLt.toLocaleString()} L
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
+                    <span style={{ padding: '3px 6px', borderRadius: 4, fontWeight: 'bold', background: isOverLimit ? '#fee2e2' : '#eafaf1', color: isOverLimit ? '#dc2626' : '#27ae60' }}>
+                      {tyLeHaoHut.toFixed(2)}%
+                    </span>
+                    {isOverLimit && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 4 }}>Vượt định mức 0.5%!</div>}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                       {docs.exportSlip ? <span title="Phiếu XK">📝</span> : <span title="Thiếu Phiếu XK">⚠️</span>}
                       {docs.deliveryReceipt ? <span title="Biên bản giao">📝</span> : <span title="Thiếu Biên bản">⚠️</span>}
                       {docs.lossReport ? <span title="BB Hao hụt">📝</span> : <span title="Thiếu BB Hao hụt">⚠️</span>}
@@ -739,21 +997,21 @@ function AccountantDashboard({ user, onLogout }) {
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     {o.approvalStatus === 'approved' ? (
-                      <span style={{ color:'#27ae60', fontWeight:'bold' }}>✅ Đã chốt</span>
+                      <span style={{ color: '#27ae60', fontWeight: 'bold' }}>✅ Đã chốt</span>
                     ) : o.approvalStatus === 'rejected' ? (
-                      <span style={{ color:'#c0392b', fontWeight:'bold' }}>❌ Từ chối</span>
+                      <span style={{ color: '#c0392b', fontWeight: 'bold' }}>❌ Từ chối</span>
                     ) : (
-                      <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                         <button onClick={() => handleApproveTrip(o.id, 'approved')} disabled={!hasAll}
-                          style={{ padding:'4px 8px', background: hasAll?'#27ae60':'#bdc3c7', color:'white', border:'none', borderRadius:4, cursor: hasAll?'pointer':'not-allowed', fontSize:11 }}>✔️ Duyệt</button>
+                          style={{ padding: '4px 8px', background: hasAll ? '#27ae60' : '#bdc3c7', color: 'white', border: 'none', borderRadius: 4, cursor: hasAll ? 'pointer' : 'not-allowed', fontSize: 11 }}>✔️ Duyệt</button>
                         <button onClick={() => handleApproveTrip(o.id, 'rejected')}
-                          style={{ padding:'4px 8px', background:'#e74c3c', color:'white', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>❌ Từ chối</button>
+                          style={{ padding: '4px 8px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>❌ Từ chối</button>
                       </div>
                     )}
-                    {o.approvalNote && <div style={{ fontSize:10, color:'#c0392b', fontStyle:'italic', marginTop:4 }}>Lý do: {o.approvalNote}</div>}
+                    {o.approvalNote && <div style={{ fontSize: 10, color: '#c0392b', fontStyle: 'italic', marginTop: 4 }}>Lý do: {o.approvalNote}</div>}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button onClick={() => exportBienBanHaoHut(o)} style={{ padding:'4px 8px', background:'#f39c12', color:'white', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>📄 BB Hao hụt</button>
+                    <button onClick={() => exportBienBanHaoHut(o)} style={{ padding: '4px 8px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>📄 BB Hao hụt</button>
                   </td>
                 </tr>
               )
@@ -772,21 +1030,26 @@ function AccountantDashboard({ user, onLogout }) {
     // Theo xe
     const byVehicle = {}
     completed.forEach(o => {
+      const p = getPricing(o.orderId, o.product, orders);
       if (!byVehicle[o.vehiclePlate]) byVehicle[o.vehiclePlate] = { trips: 0, revenue: 0 }
       byVehicle[o.vehiclePlate].trips++
-      byVehicle[o.vehiclePlate].revenue += (Number(o.amount) || 0) * 20000
+      byVehicle[o.vehiclePlate].revenue += (Number(o.amount) || 0) * p.totalUnit
     })
 
     // Theo khách
     const byCustomer = {}
     completed.forEach(o => {
+      const p = getPricing(o.orderId, o.product, orders);
       const name = o.destination || 'Chưa rõ'
       if (!byCustomer[name]) byCustomer[name] = { trips: 0, revenue: 0 }
       byCustomer[name].trips++
-      byCustomer[name].revenue += (Number(o.amount) || 0) * 20000
+      byCustomer[name].revenue += (Number(o.amount) || 0) * p.totalUnit
     })
 
-    const totalRev = completed.reduce((s, o) => s + (Number(o.amount) || 0) * 20000, 0)
+    const totalRev = completed.reduce((s, o) => {
+      const p = getPricing(o.orderId, o.product, orders);
+      return s + (Number(o.amount) || 0) * p.totalUnit;
+    }, 0)
     const totalExp = approvedExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
 
     // Export CSV
@@ -808,7 +1071,10 @@ function AccountantDashboard({ user, onLogout }) {
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={handleExportCSV} style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>📥 Xuất CSV</button>
             <button onClick={() => {
-              const totalRevenue = completed.reduce((s, o) => s + (Number(o.amount) || 0) * 20000, 0)
+              const totalRevenue = completed.reduce((s, o) => {
+                const p = getPricing(o.orderId, o.product, orders);
+                return s + (Number(o.amount) || 0) * p.totalUnit;
+              }, 0)
               const expByType = {}
               approvedExpenses.forEach(e => {
                 const t = e.type === 'BOT' ? 'bot' : e.type === 'fuel' ? 'fuel' : e.type === 'repair' ? 'repair' : 'other'
@@ -883,8 +1149,12 @@ function AccountantDashboard({ user, onLogout }) {
     <div className="dashboard-container">
       <nav className="navbar">
         <div className="navbar-brand">
-          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-          <h2>📒 Kế Toán Dashboard</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: 'var(--primary)', color: 'white', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+              <Receipt size={20} />
+            </div>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, letterSpacing: '-0.5px' }}>Kế Toán</h2>
+          </div>
         </div>
         <div className="navbar-menu">
           <NotificationBell userId={user.userId} />
@@ -893,14 +1163,21 @@ function AccountantDashboard({ user, onLogout }) {
         </div>
       </nav>
 
-      {sidebarOpen && <div className="sidebar-overlay show" onClick={() => setSidebarOpen(false)} />}
       <div className="dashboard-content">
-        <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar">
           <ul className="menu">
-            {[['overview', '📊 Tổng Quan'], ['ar', '💰 Công Nợ Phải Thu'], ['ap', '💸 Chi Phí Vận Hành'], ['payroll', '💳 Lương & Thưởng/Phạt'], ['reconcile', '📄 Đối Soát Chứng Từ'], ['report', '📈 Báo Cáo Tài Chính'], ['profile', '👤 Hồ Sơ']].map(([key, label]) => (
-              <li key={key} className={`menu-item ${activeMenu === key ? 'active' : ''}`}
-                onClick={() => { setActiveMenu(key); setSidebarOpen(false) }}>{label}</li>
-            ))}
+            <li className="menu-section-title">Tài chính</li>
+            <li className={`menu-item ${activeMenu === 'overview' ? 'active' : ''}`} onClick={() => setActiveMenu('overview')}><LayoutDashboard size={18} /> Tổng Quan</li>
+            <li className={`menu-item ${activeMenu === 'ar' ? 'active' : ''}`} onClick={() => setActiveMenu('ar')}><Receipt size={18} /> Công Nợ Phải Thu</li>
+            <li className={`menu-item ${activeMenu === 'ap' ? 'active' : ''}`} onClick={() => setActiveMenu('ap')}><Wallet size={18} /> Chi Phí Vận Hành</li>
+            <li className={`menu-item ${activeMenu === 'payroll' ? 'active' : ''}`} onClick={() => setActiveMenu('payroll')}><CreditCard size={18} /> Lương & Thưởng/Phạt</li>
+
+            <li className="menu-section-title">Đối soát & Báo cáo</li>
+            <li className={`menu-item ${activeMenu === 'reconcile' ? 'active' : ''}`} onClick={() => setActiveMenu('reconcile')}><FileCheck size={18} /> Đối Soát Chứng Từ</li>
+            <li className={`menu-item ${activeMenu === 'report' ? 'active' : ''}`} onClick={() => setActiveMenu('report')}><BarChart3 size={18} /> Báo Cáo Tài Chính</li>
+
+            <li className="menu-section-title">Tài khoản</li>
+            <li className={`menu-item ${activeMenu === 'profile' ? 'active' : ''}`} onClick={() => setActiveMenu('profile')}><UserCheck size={18} /> Hồ Sơ</li>
           </ul>
         </div>
         <div className="main-content">{renderContent()}</div>
@@ -916,17 +1193,133 @@ function AccountantDashboard({ user, onLogout }) {
         templateData={[{ driverName: 'Nguyễn Văn A', type: 'BOT', amount: 150000, description: 'Trạm Pháp Vân' }]}
         onImport={async (rows) => { alert('Đã import ' + rows.length + ' dòng!'); loadAll() }}
       />
-      <OCRScanner isOpen={showOCR} onClose={() => setShowOCR(false)} mode="receipt"
-        onResult={(data) => { alert('OCR: ' + (data.type||'') + ' - ' + (data.amount||data.total||0).toLocaleString() + 'd') }}
-      />
-      <OCRScanner isOpen={showOCRVAT} onClose={() => setShowOCRVAT(false)} mode="vat_invoice"
-        onResult={(data) => {
-          alert('HD VAT: ' + (data.sellerName||'N/A') + ' | MST: ' + (data.sellerMST||'N/A') + ' | SL: ' + (data.quantity||0).toLocaleString() + 'L | Tong: ' + (data.grandTotal||0).toLocaleString() + 'd')
-        }}
-      />
-      <OCRScanner isOpen={showOCRUNC} onClose={() => setShowOCRUNC(false)} mode="bank_transfer"
-        onResult={(data) => {
-          alert('UNC: ' + (data.sender||'N/A') + ' | So tien: ' + (data.amount||0).toLocaleString() + 'd | Noi dung: ' + (data.content||'N/A'))
+      {/* Modal thêm/sửa lương cứng (baseSalary) */}
+      {payrollEditorOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
+          zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14
+        }}>
+          <div style={{
+            width: 'min(760px, 96vw)', background: 'white', borderRadius: 14,
+            boxShadow: '0 16px 50px rgba(0,0,0,0.25)', overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '14px 16px', borderBottom: '1px solid #e2e8f0',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16 }}>
+                  {payrollEditorMode === 'add' ? '➕ Thêm lương cứng' : '✏️ Sửa lương cứng'}
+                </h3>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                  Lương cứng được lưu trong `drivers.baseSalary` và bảng lương sẽ tự tính lại.
+                </div>
+              </div>
+              <button
+                onClick={() => setPayrollEditorOpen(false)}
+                style={{ cursor: 'pointer', border: 'none', background: 'transparent', fontSize: 20, color: '#64748b' }}
+                title="Đóng"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>Tài xế</div>
+                <select
+                  value={payrollEditorDriverId}
+                  onChange={(e) => setPayrollEditorDriverId(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 10px', borderRadius: 10,
+                    border: '1px solid #cbd5e1', outline: 'none', fontSize: 13
+                  }}
+                >
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.fullname || d.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>Lương cứng (VNĐ)</div>
+                <input
+                  value={payrollEditorBaseSalary}
+                  onChange={(e) => setPayrollEditorBaseSalary(e.target.value)}
+                  inputMode="numeric"
+                  style={{
+                    width: '100%', padding: '10px 10px', borderRadius: 10,
+                    border: '1px solid #cbd5e1', outline: 'none', fontSize: 13
+                  }}
+                  placeholder="VD: 8000000"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                <button
+                  onClick={() => setPayrollEditorOpen(false)}
+                  style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#f1f5f9', color: '#0f172a', fontWeight: 800 }}
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={async () => {
+                    const n = Number(String(payrollEditorBaseSalary).replace(/\./g, '').replace(/,/g, '.')) || 0
+                    if (!payrollEditorDriverId) return alert('Chưa chọn tài xế.')
+                    const res = await updateUser(payrollEditorDriverId, { baseSalary: n })
+                    if (!res?.success) return alert('Lỗi cập nhật: ' + (res?.message || 'Không rõ'))
+
+                    const driver = drivers.find(d => d.id === payrollEditorDriverId)
+                    await logAudit(
+                      'UPDATE',
+                      `${payrollEditorMode === 'add' ? 'Thêm' : 'Sửa'} lương cứng (baseSalary=${n}) - tài xế ID: ${payrollEditorDriverId}`
+                    )
+
+                    // Optionally notify driver (nếu hệ thống của bạn đã bật)
+                    if (driver?.id) {
+                      await sendAppNotification({
+                        userId: driver.id,
+                        title: 'Cập nhật lương cứng',
+                        message: `Lương cứng baseSalary của bạn đã được cập nhật: ${n.toLocaleString()} VNĐ.`,
+                        type: 'payroll',
+                      }).catch(() => {})
+                    }
+
+                    setPayrollEditorOpen(false)
+                    await loadAll()
+                  }}
+                  style={{ flex: 2, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#059669', color: 'white', fontWeight: 900 }}
+                >
+                  ✅ Lưu
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <ARConfirmPaymentModal
+        isOpen={showConfirmAR}
+        trip={confirmARTrip}
+        onClose={() => { setShowConfirmAR(false); setConfirmARTrip(null) }}
+        onConfirm={async ({ amount, sender, content, receiptImage }) => {
+          if (!confirmARTrip) return
+          await createTransaction({
+            type: 'ar_payment',
+            tripId: confirmARTrip.id,
+            orderId: confirmARTrip.orderId,
+            customerName: confirmARTrip.destination || '',
+            amount: Number(amount || 0),
+            sender: sender || '',
+            content: content || '',
+            receiptImage: receiptImage || '',
+            paidAt: new Date().toISOString(),
+          })
+          await logAudit('CREATE', `Xác nhận thu AR cho chuyến ID: ${confirmARTrip.id} — ${Number(amount || 0).toLocaleString()}đ`)
+          setShowConfirmAR(false)
+          setConfirmARTrip(null)
+          loadAll()
         }}
       />
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getNotificationsByUser, markAsRead, markAllAsRead } from '../services/notificationService'
+import { Bell, Package, Truck, Wallet, AlertTriangle, Settings } from 'lucide-react'
 
 function NotificationBell({ userId }) {
     const [notifications, setNotifications] = useState([])
@@ -52,22 +53,25 @@ function NotificationBell({ userId }) {
 
     const typeIcon = (type) => {
         switch (type) {
-            case 'order': return '📦'
-            case 'delivery': return '🚛'
-            case 'expense': return '💰'
-            case 'sos': return '🆘'
-            case 'system': return '⚙️'
-            default: return '🔔'
+            case 'order': return <Package size={18} color="#3b82f6" />
+            case 'delivery': return <Truck size={18} color="#10b981" />
+            case 'expense': return <Wallet size={18} color="#f59e0b" />
+            case 'sos': return <AlertTriangle size={18} color="#ef4444" />
+            case 'system': return <Settings size={18} color="#64748b" />
+            default: return <Bell size={18} color="#64748b" />
         }
     }
 
     return (
-        <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+        <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
             <button onClick={() => setOpen(!open)} style={{
-                background: 'none', border: 'none', cursor: 'pointer', fontSize: 20,
-                position: 'relative', padding: '4px 8px'
-            }}>
-                🔔
+                background: 'none', border: 'none', cursor: 'pointer',
+                position: 'relative', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#475569', transition: 'color 0.2s', borderRadius: '50%'
+            }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseOut={(e) => e.currentTarget.style.background = 'none'}>
+                <Bell size={22} className={unread > 0 ? "bell-ringing" : ""} />
                 {unread > 0 && (
                     <span style={{
                         position: 'absolute', top: -2, right: -2, background: '#e74c3c',
@@ -109,8 +113,10 @@ function NotificationBell({ userId }) {
                                     background: n.isRead ? 'white' : '#f0f7ff',
                                     transition: 'background 0.2s ease'
                                 }}>
-                                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                                    <span style={{ fontSize: 20 }}>{typeIcon(n.type)}</span>
+                                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                    <div style={{ padding: '8px', background: '#f8fafc', borderRadius: '8px', display: 'flex' }}>
+                                        {typeIcon(n.type)}
+                                    </div>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ fontSize: 13, fontWeight: n.isRead ? 400 : 600, color: '#2c3e50' }}>{n.title || 'Thông báo'}</div>
                                         <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{n.message}</div>
@@ -128,6 +134,19 @@ function NotificationBell({ userId }) {
                 @keyframes pulse-notif {
                     0%, 100% { transform: scale(1); }
                     50% { transform: scale(1.2); }
+                }
+                @keyframes ring-bell {
+                    0% { transform: rotate(0); }
+                    10% { transform: rotate(15deg); }
+                    20% { transform: rotate(-10deg); }
+                    30% { transform: rotate(5deg); }
+                    40% { transform: rotate(-5deg); }
+                    50% { transform: rotate(0); }
+                    100% { transform: rotate(0); }
+                }
+                .bell-ringing {
+                    animation: ring-bell 2s infinite ease-in-out;
+                    color: #2563eb;
                 }
             `}</style>
         </div>

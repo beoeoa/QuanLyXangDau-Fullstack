@@ -48,3 +48,28 @@ export const markAllAsRead = async (userId) => {
         return { success: false };
     }
 };
+
+// Hàm tiện ích gửi thông báo
+export const sendAppNotification = async ({ userId, title, message, type = 'system', isRead = false }) => {
+    try {
+        await createNotification({ userId, title, message, type, isRead, createdAt: new Date().toISOString() });
+    } catch (e) {
+        console.error('Lỗi khi gửi thông báo:', e);
+    }
+};
+
+// Gửi thông báo cho toàn bộ User thuộc 1 Role
+export const notifyRole = async (roleName, { title, message, type = 'system' }) => {
+    try {
+        const res = await fetch(`${API_URL}/users`);
+        if (res.ok) {
+            const users = await res.json();
+            const targets = users.filter(u => u.role === roleName && u.id);
+            for (const target of targets) {
+                await sendAppNotification({ userId: target.id, title, message, type });
+            }
+        }
+    } catch (e) {
+        console.error(`Lỗi gửi thông báo cho ${roleName}:`, e);
+    }
+};

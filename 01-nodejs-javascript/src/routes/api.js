@@ -17,7 +17,7 @@ const {
     // Transportation
     getVehicles, addVehicle, createDeliveryOrder,
     getOrdersByDriver, updateOrderStatus,
-    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderSeal, updateOrderApproval,
+    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderLocationCtrl, updateOrderSeal, updateOrderApproval, deleteDeliveryOrderCtrl,
     // Audit Logs
     getAuditLogsCtrl, createAuditLog,
     // Fleet Vehicles
@@ -100,9 +100,11 @@ routerAPI.get('/delivery-orders', getAllDeliveryOrdersCtrl);
 routerAPI.post('/delivery-orders', createDeliveryOrder);
 routerAPI.get('/delivery-orders/driver/:driverId', getOrdersByDriver);
 routerAPI.put('/delivery-orders/:id/status', updateOrderStatus);
+routerAPI.put('/delivery-orders/:id/location', updateOrderLocationCtrl);
 routerAPI.put('/delivery-orders/:id/documents', updateOrderDocuments);
 routerAPI.put('/delivery-orders/:id/seal', updateOrderSeal);
 routerAPI.put('/delivery-orders/:id/approval', updateOrderApproval);
+routerAPI.delete('/delivery-orders/:id', deleteDeliveryOrderCtrl);
 routerAPI.get('/delivery-orders/driver-stats/:driverId', getDriverTripStatsCtrl);
 routerAPI.get('/delivery-orders/all-stats', getAllDriverTripStatsCtrl);
 

@@ -8,15 +8,21 @@ import EmployeeManager from './admin/EmployeeManager'
 import VehicleManager from './admin/VehicleManager'
 import AuditLogManager from './admin/AuditLogManager'
 import PriceManager from './admin/PriceManager'
-import DriverScheduleManager from './admin/DriverScheduleManager' // Cập nhật module mới
+import DriverScheduleManager from './admin/DriverScheduleManager'
+import ContractManager from './admin/ContractManager'
+import OrderManager from './admin/OrderManager'
+import LiveTrackingMap from './shared/LiveTrackingMap'
 import Profile from './Profile'
 import NotificationBell from './NotificationBell'
 import { getAllFleetVehicles } from '../services/fleetVehicleService'
 import { getAllUsers } from '../services/userService'
+import {
+  LayoutDashboard, ShoppingCart, BadgeDollarSign, FileSignature,
+  CalendarClock, Factory, Users, Map, Truck, ShieldCheck, ClipboardList, Menu
+} from 'lucide-react'
 
 function AdminDashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('overview')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [vehicles, setVehicles] = useState([])
   const [drivers, setDrivers] = useState([])
 
@@ -56,8 +62,11 @@ function AdminDashboard({ user, onLogout }) {
       case 'customers': return <CustomerManager />
       case 'employees': return <EmployeeManager />
       case 'fleet': return <VehicleManager />
+      case 'contracts': return <ContractManager />
+      case 'orders': return <OrderManager />
       case 'prices': return <PriceManager />
       case 'driver-schedules': return <DriverScheduleManager />
+      case 'tracking': return <LiveTrackingMap />
       case 'auditlog': return <AuditLogManager />
       default: return <OverviewDashboard />
     }
@@ -67,8 +76,12 @@ function AdminDashboard({ user, onLogout }) {
     <div className="dashboard-container">
       <nav className="navbar">
         <div className="navbar-brand">
-          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-          <h2>👑 Hệ Thống Vận Tải Xăng Dầu 88</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: 'var(--primary)', color: 'white', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+              <Truck size={20} />
+            </div>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, letterSpacing: '-0.5px' }}>VẬN TẢI 88</h2>
+          </div>
         </div>
         <div className="navbar-menu">
           <NotificationBell userId={user.userId} />
@@ -77,35 +90,40 @@ function AdminDashboard({ user, onLogout }) {
         </div>
       </nav>
 
-      {sidebarOpen && <div className="sidebar-overlay show" onClick={() => setSidebarOpen(false)} />}
       <div className="dashboard-content">
-        <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar">
           <ul className="menu">
-            <li className="menu-section-title" style={{ fontSize: '11px', color: '#aaa', padding: '10px 15px 5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Tổng quan</li>
+            <li className="menu-section-title">Tổng quan</li>
             <li className={`menu-item ${activeMenu === 'overview' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('overview'); setSidebarOpen(false) }}>📊 Dashboard</li>
+              onClick={() => setActiveMenu('overview')}><LayoutDashboard size={18} /> Dashboard</li>
 
-            <li className="menu-section-title" style={{ fontSize: '11px', color: '#aaa', padding: '10px 15px 5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Kinh doanh</li>
+            <li className="menu-section-title">Kinh doanh</li>
+            <li className={`menu-item ${activeMenu === 'orders' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('orders')}><ShoppingCart size={18} /> Quản Lý Đơn Hàng</li>
             <li className={`menu-item ${activeMenu === 'prices' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('prices'); setSidebarOpen(false) }}>💰 Bảng Giá Xăng Dầu</li>
+              onClick={() => setActiveMenu('prices')}><BadgeDollarSign size={18} /> Bảng Giá Xăng Dầu</li>
+            <li className={`menu-item ${activeMenu === 'contracts' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('contracts')}><FileSignature size={18} /> Quản Lý Hợp Đồng</li>
             <li className={`menu-item ${activeMenu === 'driver-schedules' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('driver-schedules'); setSidebarOpen(false) }}>🗓️ Nhật ký làm việc</li>
+              onClick={() => setActiveMenu('driver-schedules')}><CalendarClock size={18} /> Nhật ký làm việc</li>
 
-            <li className="menu-section-title" style={{ fontSize: '11px', color: '#aaa', padding: '10px 15px 5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Đối tác</li>
+            <li className="menu-section-title">Đối tác</li>
             <li className={`menu-item ${activeMenu === 'suppliers' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('suppliers'); setSidebarOpen(false) }}>🏭 Nhà Cung Cấp</li>
+              onClick={() => setActiveMenu('suppliers')}><Factory size={18} /> Nhà Cung Cấp</li>
             <li className={`menu-item ${activeMenu === 'customers' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('customers'); setSidebarOpen(false) }}>👤 Khách Hàng</li>
+              onClick={() => setActiveMenu('customers')}><Users size={18} /> Khách Hàng</li>
 
-            <li className="menu-section-title" style={{ fontSize: '11px', color: '#aaa', padding: '10px 15px 5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Vận hành</li>
+            <li className="menu-section-title">Vận hành</li>
+            <li className={`menu-item ${activeMenu === 'tracking' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('tracking')}><Map size={18} /> Giám Sát Hành Trình</li>
             <li className={`menu-item ${activeMenu === 'fleet' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('fleet'); setSidebarOpen(false) }}>🚛 Quản Lý Xe Bồn</li>
+              onClick={() => setActiveMenu('fleet')}><Truck size={18} /> Quản Lý Xe Bồn</li>
             <li className={`menu-item ${activeMenu === 'employees' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('employees'); setSidebarOpen(false) }}>👥 Nhân Viên & Quyền</li>
+              onClick={() => setActiveMenu('employees')}><ShieldCheck size={18} /> Nhân Viên & Quyền</li>
 
-            <li className="menu-section-title" style={{ fontSize: '11px', color: '#aaa', padding: '10px 15px 5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Hệ thống</li>
+            <li className="menu-section-title">Hệ thống</li>
             <li className={`menu-item ${activeMenu === 'auditlog' ? 'active' : ''}`}
-              onClick={() => { setActiveMenu('auditlog'); setSidebarOpen(false) }}>📋 Nhật Ký Hệ Thống</li>
+              onClick={() => setActiveMenu('auditlog')}><ClipboardList size={18} /> Nhật Ký Hệ Thống</li>
           </ul>
         </div>
 

@@ -3,7 +3,8 @@ import './Dashboard.css'
 import { verifyUserRole } from '../services/authService'
 import { getAllCustomers, addCustomer, updateCustomer, deleteCustomer } from '../services/customerService'
 import { createOrder, getAllOrders, updateOrder, deleteOrder } from '../services/orderService'
-import { getAllDeliveryOrders, createDeliveryOrder } from '../services/transportationService'
+import { getAllDeliveryOrders, createDeliveryOrder, deleteDeliveryOrder } from '../services/transportationService'
+import { getAllPrices } from '../services/priceService'
 import { getAllFleetVehicles } from '../services/fleetVehicleService'
 import { getAllUsers } from '../services/userService'
 import Profile from './Profile'
@@ -17,18 +18,24 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend,
 
 import ContractManager from './sales/ContractManager'
 import NotificationBell from './NotificationBell'
+import { logAudit } from '../services/auditLogService'
+import { notifyRole, sendAppNotification } from '../services/notificationService'
 import DriverScheduleManager from './admin/DriverScheduleManager'
 import DateRangeFilter, { filterByDate } from './shared/DateRangeFilter'
 import { exportPhieuXuatKho, exportLenhDieuXe, exportHopDongNguyenTac } from './shared/ExportTemplates'
 import ImportDataModal from './shared/ImportDataModal'
 import OCRScanner from './shared/OCRScanner'
+import LiveTrackingMap from './shared/LiveTrackingMap'
+import PriceManager from './admin/PriceManager'
+import { LayoutDashboard, UsersRound, ShoppingCart, BadgeDollarSign, FileSignature, Truck, Map, CalendarClock, UserCheck, Menu, ClipboardList, CheckCircle } from 'lucide-react'
 
 function SalesDashboard({ user, onLogout }) {
     const [activeMenu, setActiveMenu] = useState('overview')
     const [loading, setLoading] = useState(true)
-    const [sidebarOpen, setSidebarOpen] = useState(false)
     const [filterDateFrom, setFilterDateFrom] = useState(null)
     const [filterDateTo, setFilterDateTo] = useState(null)
+    const [searchTerm, setSearchTerm] = useState('')
+    const [dispatchSearch, setDispatchSearch] = useState('')
 
     // Import & OCR states
     const [showImportOrders, setShowImportOrders] = useState(false)
@@ -42,6 +49,7 @@ function SalesDashboard({ user, onLogout }) {
     const [deliveryOrders, setDeliveryOrders] = useState([])
     const [vehicles, setVehicles] = useState([])
     const [drivers, setDrivers] = useState([])
+    const [prices, setPrices] = useState([])
 
     // Form states
     const [showCustForm, setShowCustForm] = useState(false)
@@ -50,10 +58,14 @@ function SalesDashboard({ user, onLogout }) {
 
     const [showOrderForm, setShowOrderForm] = useState(false)
     const [editingOrder, setEditingOrder] = useState(null)
-    const [orderForm, setOrderForm] = useState({ customerId: '', customerName: '', product: '', quantity: '', requestDate: '', notes: '' })
+    const [orderForm, setOrderForm] = useState({
+        orders: [{ customerId: '', customerName: '', items: [{ product: '', quantity: '', costPrice: 20000, margin: 500, freight: 200 }] }],
+        requestDate: '',
+        notes: ''
+    })
 
     const [showDispatchForm, setShowDispatchForm] = useState(false)
-    const [dispatchForm, setDispatchForm] = useState({ orderId: '', vehiclePlate: '', assignedDriverId: '', assignedDriverName: '', sourceWarehouse: '', destination: '', product: '', amount: '' })
+    const [dispatchForm, setDispatchForm] = useState({ orderId: '', vehiclePlate: '', assignedDriverId: '', assignedDriverName: '', sourceWarehouse: '', items: [{ product: '', amount: '', compartment: '', destination: '' }] })
 
     useEffect(() => {
         const check = async () => {
@@ -74,15 +86,16 @@ function SalesDashboard({ user, onLogout }) {
 
     const loadAll = async () => {
         setLoading(true)
-        const [custs, ords, delOrds, vehs, usrs] = await Promise.all([
+        const [custs, ords, delOrds, vehs, usrs, prcs] = await Promise.all([
             getAllCustomers(), getAllOrders(), getAllDeliveryOrders(),
-            getAllFleetVehicles(), getAllUsers()
+            getAllFleetVehicles(), getAllUsers(), getAllPrices()
         ])
         setCustomers(Array.isArray(custs) ? custs : [])
         setOrders(Array.isArray(ords) ? ords : [])
         setDeliveryOrders(Array.isArray(delOrds) ? delOrds : [])
         setVehicles(Array.isArray(vehs) ? vehs : [])
         setDrivers(Array.isArray(usrs) ? usrs.filter(u => u.role === 'driver' && u.isApproved !== false) : [])
+        setPrices(Array.isArray(prcs) ? prcs : [])
         setLoading(false)
     }
 
@@ -212,7 +225,27 @@ function SalesDashboard({ user, onLogout }) {
         const customer = customers.find(c => c.id === order.customerId)
         const now = new Date()
 
-        const randomSo = `04102201/VT88-BK/2022` // Fake số HD cho giống ảnh hoặc lấy ngẫu nhiên
+        const randomSo = `04102201/VT88-BK/2022`
+
+        const fallbackItems = order.items && order.items.length > 0 ? order.items : [{ product: order.product, quantity: order.quantity, costPrice: 20000, margin: 500, freight: 200 }];
+        const totalGoods = fallbackItems.reduce((sum, item) => sum + (Number(item.quantity || 0) * (Number(item.costPrice || 0) + Number(item.margin || 0))), 0);
+        const totalFreight = fallbackItems.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.freight || 0)), 0);
+
+        const itemsHtml = fallbackItems.map((item, index) => {
+            const qty = Number(item.quantity || 0);
+            const unitPrice = (Number(item.costPrice || 0) + Number(item.margin || 0));
+            return `<tr>
+                <td>${index + 1}</td>
+                <td>${item.product}</td>
+                <td>Lít</td>
+                <td>${qty.toLocaleString()}</td>
+                <td>${unitPrice.toLocaleString()}</td>
+                <td>-</td>
+                <td>${unitPrice.toLocaleString()}</td>
+                <td style="font-weight: bold;">${(qty * unitPrice).toLocaleString()}</td>
+                <td>${index === 0 ? (customer?.address || '') : ''}</td>
+            </tr>`;
+        }).join('');
 
         const html = `
 <!DOCTYPE html>
@@ -263,50 +296,40 @@ function SalesDashboard({ user, onLogout }) {
     Căn cứ vào nhu cầu CÔNG TY TNHH DỊCH VỤ THƯƠNG MẠI VẬN TẢI 88 đề nghị cấp Xăng - Dầu với nội dung như sau:
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>STT</th>
-        <th>Tên hàng hóa</th>
-        <th>ĐVT</th>
-        <th>Số Lượng<br>(lít)</th>
-        <th>Giá bán lẻ<br>(đồng/lít)</th>
-        <th>Chiết khấu<br>(đồng/lít)</th>
-        <th>Giá thanh toán<br>(đồng/lít)</th>
-        <th>Thành tiền</th>
-        <th>Địa điểm nhận hàng</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>1</td>
-        <td>${order.product}</td>
-        <td>Lít</td>
-        <td>${Number(order.quantity || 0).toLocaleString()}</td>
-        <td>22.200</td>
-        <td>-</td>
-        <td>22.200</td>
-        <td style="font-weight: bold;">${(Number(order.quantity || 0) * 22200).toLocaleString()}</td>
-        <td>${customer?.address || ''}</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td>Vận chuyển</td>
-        <td>Chuyến</td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td style="font-weight: bold;">3.500.000</td>
-        <td></td>
-      </tr>
-      <tr>
-        <td colspan="7" style="font-weight: bold; text-align: center;">TỔNG</td>
-        <td style="font-weight: bold; font-size: 15px;">${((Number(order.quantity || 0) * 22200) + 3500000).toLocaleString()}</td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
+    <table>
+      <thead>
+        <tr>
+          <th>STT</th>
+          <th>Tên hàng hóa</th>
+          <th>ĐVT</th>
+          <th>Số Lượng<br>(lít)</th>
+          <th>Giá bán lẻ<br>(đồng/lít)</th>
+          <th>Chiết khấu<br>(đồng/lít)</th>
+          <th>Giá thanh toán<br>(đồng/lít)</th>
+          <th>Thành tiền</th>
+          <th>Địa điểm nhận hàng</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+        <tr>
+          <td>${fallbackItems.length + 1}</td>
+          <td>Vận chuyển</td>
+          <td>Chuyến</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td style="font-weight: bold;">${totalFreight.toLocaleString()}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: center;">TỔNG</td>
+          <td style="font-weight: bold; font-size: 15px;">${(totalGoods + totalFreight).toLocaleString()}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
 
   <div class="notes-section">
     * Đơn giá là giá đã bao gồm thuế VAT, vận chuyển và thuế môi trường (nếu có).<br>
@@ -340,27 +363,42 @@ function SalesDashboard({ user, onLogout }) {
         const newOrders = orders.filter(o => o.status === 'new').length
         const activeDeliveries = deliveryOrders.filter(o => o.status !== 'completed').length
         const completedDeliveries = deliveryOrders.filter(o => o.status === 'completed').length
-        const activeVehicles = vehicles.filter(v => v.status === 'active' || v.status === 'Hoạt động').length
+        const activeStatuses = ['pending', 'received', 'moving', 'arrived', 'unloading']
+        const activeVehiclePlates = new Set(deliveryOrders.filter(o => activeStatuses.includes(o.status)).map(o => o.vehiclePlate))
+        const activeVehicles = activeVehiclePlates.size
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <h2>📊 Tổng Quan Kinh Doanh</h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15 }}>
-                    {[
-                        { icon: '📋', label: 'Đơn mới', value: newOrders, color: '#3498db' },
-                        { icon: '🚚', label: 'Đang giao', value: activeDeliveries, color: '#f39c12' },
-                        { icon: '✅', label: 'Đã giao', value: completedDeliveries, color: '#27ae60' },
-                        { icon: '🚛', label: 'Xe hoạt động', value: `${activeVehicles}/${vehicles.length}`, color: '#8e44ad' },
-                    ].map((s, i) => (
-                        <div key={i} style={{
-                            background: 'white', padding: 20, borderRadius: 8, textAlign: 'center',
-                            borderLeft: `4px solid ${s.color}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-                        }}>
-                            <div style={{ fontSize: 28 }}>{s.icon}</div>
-                            <div style={{ fontSize: 28, fontWeight: 'bold', color: s.color }}>{s.value}</div>
-                            <div style={{ fontSize: 13, color: '#666' }}>{s.label}</div>
+                <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                    <div className="stat-card" style={{ borderLeft: '4px solid #3498db' }}>
+                        <div className="stat-icon" style={{ color: '#3498db' }}><ClipboardList size={24} /></div>
+                        <div className="stat-info">
+                            <h3>Đơn mới</h3>
+                            <p className="stat-number">{newOrders}</p>
                         </div>
-                    ))}
+                    </div>
+                    <div className="stat-card" style={{ borderLeft: '4px solid #f39c12' }}>
+                        <div className="stat-icon" style={{ color: '#f39c12' }}><Truck size={24} /></div>
+                        <div className="stat-info">
+                            <h3>Đang giao</h3>
+                            <p className="stat-number">{activeDeliveries}</p>
+                        </div>
+                    </div>
+                    <div className="stat-card" style={{ borderLeft: '4px solid #27ae60' }}>
+                        <div className="stat-icon" style={{ color: '#27ae60' }}><CheckCircle size={24} /></div>
+                        <div className="stat-info">
+                            <h3>Đã giao</h3>
+                            <p className="stat-number">{completedDeliveries}</p>
+                        </div>
+                    </div>
+                    <div className="stat-card" style={{ borderLeft: '4px solid #8e44ad' }}>
+                        <div className="stat-icon" style={{ color: '#8e44ad' }}><Truck size={24} /></div>
+                        <div className="stat-info">
+                            <h3>Xe hoạt động</h3>
+                            <p className="stat-number">{activeVehicles} / {vehicles.length}</p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Biểu đồ doanh số theo sản phẩm */}
@@ -370,8 +408,15 @@ function SalesDashboard({ user, onLogout }) {
                         {(() => {
                             const productMap = {}
                             orders.forEach(o => {
-                                const p = o.product || 'Khác'
-                                productMap[p] = (productMap[p] || 0) + Number(o.quantity || 0)
+                                if (o.items && o.items.length > 0) {
+                                    o.items.forEach(item => {
+                                        const p = item.product || 'Khác'
+                                        productMap[p] = (productMap[p] || 0) + Number(item.quantity || 0)
+                                    })
+                                } else {
+                                    const p = o.product || 'Khác'
+                                    productMap[p] = (productMap[p] || 0) + Number(o.quantity || 0)
+                                }
                             })
                             const labels = Object.keys(productMap)
                             const data = Object.values(productMap)
@@ -405,7 +450,8 @@ function SalesDashboard({ user, onLogout }) {
                         const custMap = {}
                         orders.forEach(o => {
                             const name = o.customerName || 'N/A'
-                            custMap[name] = (custMap[name] || 0) + Number(o.quantity || 0)
+                            const quantity = o.items && o.items.length > 0 ? o.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0) : Number(o.quantity || 0)
+                            custMap[name] = (custMap[name] || 0) + quantity
                         })
                         const sorted = Object.entries(custMap).sort((a, b) => b[1] - a[1]).slice(0, 5)
                         return sorted.length === 0 ? <p style={{ color: '#999' }}>Chưa có dữ liệu</p> : (
@@ -547,23 +593,63 @@ function SalesDashboard({ user, onLogout }) {
     // ==== ĐƠN HÀNG ====
     const handleOrderSubmit = async (e) => {
         e.preventDefault()
-        if (editingOrder) {
-            await updateOrder(editingOrder, orderForm)
-        } else {
-            await createOrder({ ...orderForm, createdBy: user.userId, createdByName: user.name })
+
+        const promises = [];
+        for (const ord of orderForm.orders) {
+            const validItems = ord.items.filter(i => i.product && Number(i.quantity) > 0)
+            if (validItems.length === 0 || !ord.customerId) {
+                alert('Vui lòng chọn khách hàng và nhập ít nhất 1 mặt hàng hợp lệ cho tất cả các đơn!')
+                return
+            }
+            const productNames = validItems.map(i => i.product).join(', ')
+            const totalQty = validItems.reduce((acc, i) => acc + Number(i.quantity), 0)
+
+            const finalData = {
+                customerId: ord.customerId,
+                customerName: ord.customerName,
+                items: validItems,
+                product: productNames,
+                quantity: totalQty,
+                requestDate: orderForm.requestDate,
+                notes: orderForm.notes
+            }
+
+            if (editingOrder) {
+                promises.push(updateOrder(editingOrder, finalData));
+            } else {
+                promises.push(createOrder({
+                    ...finalData,
+                    createdBy: user.userId,
+                    createdByName: user.name
+                }));
+            }
         }
+
+        await Promise.all(promises);
+
+        if (editingOrder) {
+            await logAudit('UPDATE', `Sales cập nhật đơn hàng: ${promises.length > 1 ? 'Nhiều đơn' : orderForm.orders[0].customerName}`)
+        } else {
+            await logAudit('CREATE', `Sales tạo đơn hàng mới cho: ${orderForm.orders[0].customerName}`)
+            await notifyRole('admin', { title: 'Đơn hàng mới', message: `Sales ${user.name} vừa tạo đơn hàng mới cho ${orderForm.orders[0].customerName}.`, type: 'order' })
+            await notifyRole('accountant', { title: 'Đơn hàng mới', message: `Sales vừa lên đơn hàng mới. Vui lòng kiểm tra.`, type: 'order' })
+        }
+
+        alert(editingOrder ? 'Cập nhật thành công!' : 'Đã tạo đơn thành công!');
+
         setShowOrderForm(false)
         setEditingOrder(null)
-        setOrderForm({ customerId: '', customerName: '', product: '', quantity: '', requestDate: '', notes: '' })
+        setOrderForm({ orders: [{ customerId: '', customerName: '', items: [{ product: '', quantity: '', costPrice: 20000, margin: 500, freight: 200 }] }], requestDate: '', notes: '' })
         loadAll()
     }
 
     const handleEditOrder = (o) => {
         setOrderForm({
-            customerId: o.customerId || '',
-            customerName: o.customerName || '',
-            product: o.product || '',
-            quantity: o.quantity || '',
+            orders: [{
+                customerId: o.customerId || '',
+                customerName: o.customerName || '',
+                items: o.items && o.items.length > 0 ? o.items.map(i => ({ ...i, costPrice: i.costPrice || 20000, margin: i.margin || 500, freight: i.freight || 200 })) : [{ product: o.product || '', quantity: o.quantity || '', costPrice: 20000, margin: 500, freight: 200 }]
+            }],
             requestDate: o.requestDate || '',
             notes: o.notes || ''
         })
@@ -575,58 +661,188 @@ function SalesDashboard({ user, onLogout }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <h2>📋 Quản Lý Đơn Hàng</h2>
-                <button onClick={() => { setShowOrderForm(!showOrderForm); setEditingOrder(null); setOrderForm({ customerId: '', customerName: '', product: '', quantity: '', requestDate: '', notes: '' }) }}
+                <button onClick={() => {
+                    setShowOrderForm(!showOrderForm);
+                    setEditingOrder(null);
+                    setOrderForm({
+                        orders: [{ customerId: '', customerName: '', items: [{ product: '', quantity: '', costPrice: 20000, margin: 500, freight: 200 }] }],
+                        requestDate: '', notes: ''
+                    })
+                }}
                     style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
                     {showOrderForm ? '✕ Đóng' : '+ Tạo đơn mới'}
                 </button>
             </div>
 
-            {/* Bộ lọc thời gian */}
-            <div className="date-filter-bar">
-                <label>📅 Lọc theo ngày:</label>
-                <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
-                <span>→</span>
-                <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
-                <button onClick={() => { setFilterDateFrom(''); setFilterDateTo('') }}
-                    style={{ background: '#e74c3c', color: 'white' }}>Xóa lọc</button>
+            {/* Bộ lọc thời gian và tìm kiếm */}
+            <div className="date-filter-bar" style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <label style={{ fontWeight: 500 }}>🔍 Tìm tên Cty / Mã:</label>
+                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Gõ tên khách..." style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid #ccc', outline: 'none' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderLeft: '1px solid #ddd', paddingLeft: 16 }}>
+                    <label style={{ fontWeight: 500 }}>📅 Lọc theo ngày:</label>
+                    <input type="date" value={filterDateFrom || ''} onChange={e => setFilterDateFrom(e.target.value)} />
+                    <span>→</span>
+                    <input type="date" value={filterDateTo || ''} onChange={e => setFilterDateTo(e.target.value)} />
+                </div>
+                <button onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setSearchTerm('') }}
+                    style={{ background: '#e74c3c', color: 'white', padding: '6px 12px', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Xóa lọc</button>
             </div>
 
             {showOrderForm && (
                 <form onSubmit={handleOrderSubmit} style={{ background: '#f9f9f9', padding: 20, borderRadius: 8 }}>
                     <h4 style={{ marginTop: 0 }}>{editingOrder ? '✏️ Sửa Đơn Hàng' : '➕ Tạo Đơn Mới'}</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                        {orderForm.orders && orderForm.orders.map((ord, ordIndex) => (
+                            <div key={ordIndex} style={{ border: '2px dashed #3498db', padding: '16px', borderRadius: 8, position: 'relative', background: '#fff' }}>
+                                {(orderForm.orders || []).length > 1 && (
+                                    <button type="button" onClick={() => {
+                                        const newOrders = orderForm.orders.filter((_, i) => i !== ordIndex);
+                                        setOrderForm({ ...orderForm, orders: newOrders });
+                                    }} style={{ position: 'absolute', top: 12, right: 12, background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}>
+                                        🗑️ Xóa đơn {ordIndex + 1}
+                                    </button>
+                                )}
+
+                                <h5 style={{ margin: '0 0 12px 0', color: '#2980b9' }}>Đơn hàng {ordIndex + 1}</h5>
+
+                                <div>
+                                    <label style={{ fontWeight: 'bold', fontSize: 13 }}>Khách hàng *</label>
+                                    <input required list="customer-list" value={ord.customerName} placeholder="Gõ tìm tên khách hàng..."
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            const c = customers.find(cu => cu.name === val)
+                                            const newOrders = [...orderForm.orders];
+                                            newOrders[ordIndex].customerName = val;
+                                            newOrders[ordIndex].customerId = c ? c.id : '';
+                                            setOrderForm({ ...orderForm, orders: newOrders })
+                                        }}
+                                        style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4, boxSizing: 'border-box' }}
+                                    />
+                                </div>
+
+                                {/* Danh sách các mặt hàng (Nhiều ngăn xe bồn) */}
+                                <div style={{ padding: '10px', border: '1px dashed #ccc', borderRadius: '6px', background: '#fafafa', marginTop: 12 }}>
+                                    <label style={{ fontWeight: 'bold', fontSize: 13, marginBottom: 8, display: 'block', color: '#16a085' }}>📦 Chi tiết hàng hóa (Xe bồn nhiều ngăn)</label>
+                                    {ord.items.map((item, index) => (
+                                        <div key={index} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px dashed #eee' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                                                <input required list="fuel-products" value={item.product} placeholder="Chọn hoặc nhập hàng..."
+                                                    onChange={e => {
+                                                        const newOrders = [...orderForm.orders];
+                                                        newOrders[ordIndex].items[index].product = e.target.value;
+                                                        setOrderForm({ ...orderForm, orders: newOrders });
+                                                    }}
+                                                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                                                <input type="number" required placeholder="Số lượng (Lít)" value={item.quantity}
+                                                    onChange={e => {
+                                                        const newOrders = [...orderForm.orders];
+                                                        newOrders[ordIndex].items[index].quantity = e.target.value;
+                                                        setOrderForm({ ...orderForm, orders: newOrders });
+                                                    }}
+                                                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                                                {ord.items.length > 1 && (
+                                                    <button type="button" onClick={() => {
+                                                        const newOrders = [...orderForm.orders];
+                                                        newOrders[ordIndex].items = newOrders[ordIndex].items.filter((_, i) => i !== index);
+                                                        setOrderForm({ ...orderForm, orders: newOrders });
+                                                    }} style={{ padding: '8px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>✖</button>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+                                                <div>
+                                                    <label style={{ fontSize: 11, fontWeight: 'bold' }}>Tiền hàng (Giá vốn)</label>
+                                                    <input type="number" required placeholder="đ/L" value={item.costPrice}
+                                                        onChange={e => {
+                                                            const newOrders = [...orderForm.orders];
+                                                            newOrders[ordIndex].items[index].costPrice = Number(e.target.value);
+                                                            setOrderForm({ ...orderForm, orders: newOrders });
+                                                        }} style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 11, fontWeight: 'bold' }}>Lợi nhuận mong muốn</label>
+                                                    <input type="number" required placeholder="đ/L" value={item.margin}
+                                                        onChange={e => {
+                                                            const newOrders = [...orderForm.orders];
+                                                            newOrders[ordIndex].items[index].margin = Number(e.target.value);
+                                                            setOrderForm({ ...orderForm, orders: newOrders });
+                                                        }} style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 11, fontWeight: 'bold', color: '#2980b9' }}>Khoảng cách (km)</label>
+                                                    <input type="number" placeholder="km" value={item.distance || ''}
+                                                        onChange={e => {
+                                                            const dist = Number(e.target.value);
+                                                            const newOrders = [...orderForm.orders];
+                                                            newOrders[ordIndex].items[index].distance = dist;
+                                                            // Tự động tính cước nếu có đơn giá/km
+                                                            if (item.ratePerKm) {
+                                                                newOrders[ordIndex].items[index].freight = dist * item.ratePerKm;
+                                                            }
+                                                            setOrderForm({ ...orderForm, orders: newOrders });
+                                                        }} style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid #3498db', boxSizing: 'border-box' }} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 11, fontWeight: 'bold', color: '#2980b9' }}>Cước/km (đ)</label>
+                                                    <input type="number" placeholder="đ/km" value={item.ratePerKm || ''}
+                                                        onChange={e => {
+                                                            const rate = Number(e.target.value);
+                                                            const newOrders = [...orderForm.orders];
+                                                            newOrders[ordIndex].items[index].ratePerKm = rate;
+                                                            // Tự động tính cước nếu có khoảng cách
+                                                            if (item.distance) {
+                                                                newOrders[ordIndex].items[index].freight = item.distance * rate;
+                                                            }
+                                                            setOrderForm({ ...orderForm, orders: newOrders });
+                                                        }} style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid #3498db', boxSizing: 'border-box' }} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 11, fontWeight: 'bold' }}>Cước vận tải (đ/L)</label>
+                                                    <input type="number" required placeholder="đ/L" value={item.freight}
+                                                        onChange={e => {
+                                                            const newOrders = [...orderForm.orders];
+                                                            newOrders[ordIndex].items[index].freight = Number(e.target.value);
+                                                            // Xóa khoảng cách/đơn giá cước nếu nhập tay trực tiếp để tránh nhầm lẫn
+                                                            newOrders[ordIndex].items[index].distance = '';
+                                                            newOrders[ordIndex].items[index].ratePerKm = '';
+                                                            setOrderForm({ ...orderForm, orders: newOrders });
+                                                        }} style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 11, fontWeight: 'bold', color: '#27ae60' }}>Đơn giá bán</label>
+                                                    <div style={{ padding: '6px', background: '#eafaf1', borderRadius: 4, fontWeight: 'bold', color: '#27ae60', border: '1px solid #27ae60', fontSize: 13, textAlign: 'center' }}>
+                                                        {((Number(item.costPrice) || 0) + (Number(item.margin) || 0) + (Number(item.freight) || 0)).toLocaleString()} ₫
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={() => {
+                                        const newOrders = [...orderForm.orders];
+                                        newOrders[ordIndex].items.push({ product: '', quantity: '', costPrice: 20000, margin: 500, freight: 200, distance: '', ratePerKm: '' });
+                                        setOrderForm({ ...orderForm, orders: newOrders });
+                                    }} style={{ padding: '6px 12px', background: '#bdc3c7', color: '#2c3e50', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 'bold' }}>
+                                        + Thêm mặt hàng / hầm mới
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+
+                        {!editingOrder && (
+                            <div style={{ textAlign: 'center', marginTop: 8 }}>
+                                <button type="button" onClick={() => {
+                                    const currentOrders = orderForm.orders || [];
+                                    const newOrders = [...currentOrders, { customerId: '', customerName: '', items: [{ product: '', quantity: '', costPrice: 20000, margin: 500, freight: 200, distance: '', ratePerKm: '' }] }];
+                                    setOrderForm({ ...orderForm, orders: newOrders });
+                                }} style={{ padding: '8px 24px', background: '#9b59b6', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 'bold', fontSize: 14 }}>
+                                    ➕ Thêm Đơn Hàng Mới
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Khách hàng *</label>
-                            <select required value={orderForm.customerId}
-                                onChange={e => {
-                                    const c = customers.find(cu => cu.id === e.target.value)
-                                    setOrderForm({ ...orderForm, customerId: e.target.value, customerName: c?.name || '' })
-                                }}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
-                                <option value="">-- Chọn --</option>
-                                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Loại hàng *</label>
-                            <select required value={orderForm.product}
-                                onChange={e => setOrderForm({ ...orderForm, product: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
-                                <option value="">-- Chọn --</option>
-                                <option value="Xăng RON 95-III">Xăng RON 95-III</option>
-                                <option value="Xăng RON 95-V">Xăng RON 95-V</option>
-                                <option value="Xăng E5 RON 92">Xăng E5 RON 92</option>
-                                <option value="Dầu Diesel 0.05S">Dầu Diesel 0.05S</option>
-                                <option value="Dầu Diesel 0.001S">Dầu Diesel 0.001S</option>
-                                <option value="Dầu KO">Dầu KO</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Số lượng (Lít) *</label>
-                            <input type="number" required value={orderForm.quantity}
-                                onChange={e => setOrderForm({ ...orderForm, quantity: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginTop: 4 }} />
-                        </div>
                         <div>
                             <label style={{ fontWeight: 'bold', fontSize: 13 }}>Ngày yêu cầu giao</label>
                             <input type="date" value={orderForm.requestDate}
@@ -653,11 +869,16 @@ function SalesDashboard({ user, onLogout }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                 <thead><tr style={{ background: '#f5f5f5' }}>
                     <th style={{ padding: 10, textAlign: 'left' }}>Khách</th>
-                    <th>Hàng</th><th>SL (L)</th><th>Ngày YC</th><th>Trạng thái</th><th>Hành động</th>
+                    <th>Hàng</th><th>SL (L)</th><th>Tổng tiền (₫)</th><th>Lợi nhuận (₫)</th><th>Ngày YC</th><th>Trạng thái</th><th>Hành động</th>
                 </tr></thead>
                 <tbody>
                     {orders.filter(o => {
-                        if (!filterDateFrom && !filterDateTo) return true;
+                        if (searchTerm) {
+                            const term = searchTerm.toLowerCase();
+                            const matchName = o.customerName && o.customerName.toLowerCase().includes(term);
+                            const matchId = o.id && o.id.toLowerCase().includes(term);
+                            if (!matchName && !matchId) return false;
+                        }
                         const d = o.requestDate || '';
                         if (filterDateFrom && d < filterDateFrom) return false;
                         if (filterDateTo && d > filterDateTo) return false;
@@ -665,8 +886,26 @@ function SalesDashboard({ user, onLogout }) {
                     }).map(o => (
                         <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: 10 }}><strong>{o.customerName}</strong></td>
-                            <td style={{ textAlign: 'center' }}>{o.product}</td>
-                            <td style={{ textAlign: 'center' }}>{Number(o.quantity).toLocaleString()}</td>
+                            <td style={{ textAlign: 'center' }}>
+                                {o.items ? o.items.map((i, idx) => <span key={idx} style={{ display: 'block', fontSize: 11, background: '#ecf0f1', padding: '2px 6px', margin: '2px 0', borderRadius: '4px' }}>{i.product}</span>) : o.product}
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#2980b9' }}>
+                                {o.items ?
+                                    o.items.map((i, idx) => <span key={idx} style={{ display: 'block', fontSize: 11 }}>{Number(i.quantity).toLocaleString()} L</span>)
+                                    : Number(o.quantity).toLocaleString() + ' L'
+                                }
+                                {o.items && o.items.length > 1 && <span style={{ display: 'block', fontSize: 12, marginTop: 4, borderTop: '1px solid #ccc', paddingTop: 2 }}>Tổng: {Number(o.quantity).toLocaleString()} L</span>}
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#27ae60' }}>
+                                {o.items ?
+                                    o.items.reduce((sum, i) => sum + (Number(i.quantity) || 0) * ((Number(i.costPrice) || 20000) + (Number(i.margin) || 500) + (Number(i.freight) || 200)), 0).toLocaleString()
+                                    : (Number(o.quantity || 0) * 20700).toLocaleString()} ₫
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8e44ad' }}>
+                                {o.items ?
+                                    o.items.reduce((sum, i) => sum + (Number(i.quantity) || 0) * (Number(i.margin) || 500), 0).toLocaleString()
+                                    : (Number(o.quantity || 0) * 500).toLocaleString()} ₫
+                            </td>
                             <td style={{ textAlign: 'center' }}>{o.requestDate || '-'}</td>
                             <td style={{ textAlign: 'center' }}>
                                 <span style={{
@@ -684,28 +923,30 @@ function SalesDashboard({ user, onLogout }) {
                                     📄 Phiếu ĐN Cấp Xăng
                                 </button>
                                 {o.status === 'new' && (
-                                    <button onClick={() => {
-                                        const cust = customers.find(c => c.id === o.customerId)
-                                        setDispatchForm({
-                                            orderId: o.id,
-                                            destination: cust?.name || o.customerName,
-                                            product: o.product,
-                                            amount: o.quantity,
-                                            vehiclePlate: '',
-                                            assignedDriverId: '',
-                                            assignedDriverName: '',
-                                            sourceWarehouse: 'Kho Đình Vũ - Hải Phòng'
-                                        })
-                                        setShowDispatchForm(true)
-                                        setActiveMenu('dispatch')
-                                    }} style={{ padding: '4px 6px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginRight: 4 }}>
-                                        🚛 Lên lệnh
-                                    </button>
+                                    <>
+                                        <button onClick={() => {
+                                            const cust = customers.find(c => c.id === o.customerId)
+                                            setDispatchForm({
+                                                orderId: o.id,
+                                                items: o.items && o.items.length > 0
+                                                    ? o.items.map(i => ({ product: i.product || '', amount: i.quantity || '', compartment: '', destination: cust?.name || o.customerName }))
+                                                    : [{ product: o.product || '', amount: o.quantity || '', compartment: '', destination: cust?.name || o.customerName }],
+                                                vehiclePlate: '',
+                                                assignedDriverId: '',
+                                                assignedDriverName: '',
+                                                sourceWarehouse: 'Kho Đình Vũ - Hải Phòng'
+                                            })
+                                            setShowDispatchForm(true)
+                                            setActiveMenu('dispatch')
+                                        }} style={{ padding: '4px 6px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginRight: 4 }}>
+                                            🚛 Lên lệnh
+                                        </button>
+                                        <button onClick={() => handleEditOrder(o)}
+                                            style={{ padding: '4px 6px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginRight: 4 }}>✏️</button>
+                                        <button onClick={async () => { if (window.confirm('Xóa đơn này?')) { await deleteOrder(o.id); loadAll() } }}
+                                            style={{ padding: '4px 6px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>🗑️</button>
+                                    </>
                                 )}
-                                <button onClick={() => handleEditOrder(o)}
-                                    style={{ padding: '4px 6px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginRight: 4 }}>✏️</button>
-                                <button onClick={async () => { if (window.confirm('Xóa đơn này?')) { await deleteOrder(o.id); loadAll() } }}
-                                    style={{ padding: '4px 6px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>🗑️</button>
                             </td>
                         </tr>
                     ))}
@@ -717,126 +958,303 @@ function SalesDashboard({ user, onLogout }) {
     // ==== LỆNH ĐIỀU ĐỘNG ====
     const handleDispatch = async (e) => {
         e.preventDefault()
+
+        const validItems = (dispatchForm.items || []).filter(i => i.product && i.amount)
+        if (validItems.length === 0) {
+            alert('Vui lòng nhập ít nhất 1 mặt hàng!')
+            return
+        }
+
+        const uniqueDests = [...new Set(validItems.map(i => i.destination).filter(Boolean))]
+
         const result = await createDeliveryOrder({
             ...dispatchForm,
+            destination: uniqueDests.join(' | '),
+            items: validItems,
+            product: validItems.map(i => i.product).join(', '),
+            amount: validItems.reduce((sum, i) => sum + Number(i.amount), 0),
             createdBy: user.userId,
             createdByName: user.name
         })
         if (result.success) {
+            // Đánh dấu đơn hàng gốc đã lên lệnh điều động (nếu có orderId trực tiếp)
             if (dispatchForm.orderId) {
                 await updateOrder(dispatchForm.orderId, { status: 'dispatched' })
             }
-            alert('✅ Đã lên lệnh điều động thành công!')
+
+            // Tìm & đánh dấu tất cả đơn hàng của các cty được ghép trong lệnh này
+            const customerIdsInDispatch = [...new Set(validItems.map(i => i.customerId).filter(Boolean))]
+            for (const custId of customerIdsInDispatch) {
+                // Tìm các đơn hàng còn status 'new' của cty này
+                const pendingOrders = orders.filter(o => o.customerId === custId && o.status === 'new')
+                for (const ord of pendingOrders) {
+                    await updateOrder(ord.id, { status: 'dispatched' })
+                }
+            }
+
+            alert('✅ Đã lên lệnh điều động thành công!\n📋 Các đơn hàng liên quan đã được cập nhật trạng thái.')
+            await logAudit('CREATE', `Sales tạo lệnh điều động cho xe: ${dispatchForm.vehiclePlate}`)
+            await notifyRole('admin', { title: 'Lệnh điều động mới', message: `Sales vừa lên lệnh điều động cho xe ${dispatchForm.vehiclePlate}.`, type: 'delivery' })
+            await sendAppNotification({ userId: dispatchForm.assignedDriverId, title: 'Cõ chuyến hàng mới', message: `Bạn được phân công lái xe ${dispatchForm.vehiclePlate} đi giao hàng.`, type: 'delivery' })
+
             setShowDispatchForm(false)
-            setDispatchForm({ orderId: '', vehiclePlate: '', assignedDriverId: '', assignedDriverName: '', sourceWarehouse: '', destination: '', product: '', amount: '' })
+            setDispatchForm({ orderId: '', vehiclePlate: '', assignedDriverId: '', assignedDriverName: '', sourceWarehouse: '', items: [{ product: '', amount: '', compartment: '', destination: '', customerId: '' }] })
             loadAll()
         }
     }
 
     const renderDispatch = () => {
         const active = deliveryOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
+        const getCompartmentDetails = (plate) => {
+            const v = vehicles.find(x => x.plateNumber === plate)
+            return v ? `Tải trọng: ${v.totalCapacity || 0}L - Số hầm: ${v.compartments || 0}` : ''
+        }
 
         return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <h2>🚛 Lệnh Điều Động (Dispatching)</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <h2>🚛 Lệnh Điều Động (Dispatching)</h2>
 
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button onClick={() => setShowDispatchForm(!showDispatchForm)}
-                    style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-                    {showDispatchForm ? '✕ Đóng' : '+ Tạo lệnh mới'}
-                </button>
-                <button onClick={() => setShowImportOrders(true)}
-                    style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-                    📥 Import Đơn hàng Excel
-                </button>
-                <button onClick={() => setShowOCR(true)}
-                    style={{ padding: '8px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-                    🔬 Quét OCR
-                </button>
-            </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button onClick={() => {
+                        setShowDispatchForm(!showDispatchForm)
+                        if (!showDispatchForm) setDispatchForm({ orderId: '', vehiclePlate: '', assignedDriverId: '', assignedDriverName: '', sourceWarehouse: '', items: [{ product: '', amount: '', compartment: '', destination: '' }] })
+                    }}
+                        style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                        {showDispatchForm ? '✕ Đóng' : '+ Tạo lệnh mới'}
+                    </button>
+                    <button onClick={() => setShowImportOrders(true)}
+                        style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                        📥 Import Đơn hàng Excel
+                    </button>
+                    <button onClick={() => setShowOCR(true)}
+                        style={{ padding: '8px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                        🔬 Quét OCR
+                    </button>
+                </div>
 
-            {showDispatchForm && (
-                <form onSubmit={handleDispatch} style={{ background: '#f9f9f9', padding: 20, borderRadius: 8 }}>
-                    <h4 style={{ marginTop: 0 }}>Ghép đơn → Xe → Tài xế</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Kho xuất hàng *</label>
-                            <input type="text" required value={dispatchForm.sourceWarehouse}
-                                onChange={e => setDispatchForm({ ...dispatchForm, sourceWarehouse: e.target.value })}
-                                placeholder="Vd: Kho Đình Vũ - HP" style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginTop: 4 }} />
+                {showDispatchForm && (
+                    <form onSubmit={handleDispatch} style={{ background: '#f9f9f9', padding: 20, borderRadius: 8 }}>
+                        <h4 style={{ marginTop: 0 }}>Ghép đơn → Xe → Tài xế</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                                <label style={{ fontWeight: 'bold', fontSize: 13 }}>Kho xuất hàng *</label>
+                                <input type="text" required value={dispatchForm.sourceWarehouse}
+                                    onChange={e => setDispatchForm({ ...dispatchForm, sourceWarehouse: e.target.value })}
+                                    placeholder="Vd: Kho Đình Vũ - HP" style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginTop: 4 }} />
+                            </div>
+                            <div>
+                                <label style={{ fontWeight: 'bold', fontSize: 13 }}>Xe bồn *</label>
+                                <select required value={dispatchForm.vehiclePlate}
+                                    onChange={e => setDispatchForm({ ...dispatchForm, vehiclePlate: e.target.value })}
+                                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
+                                    <option value="">-- Chọn --</option>
+                                    {vehicles
+                                        .filter(v => v.status !== 'inactive' && v.status !== 'Nằm bãi' && !active.some(o => o.vehiclePlate === v.plateNumber))
+                                        .map(v =>
+                                            <option key={v.id} value={v.plateNumber}>{v.plateNumber} ({v.totalCapacity || 'N/A'}L - {v.compartments || 0} hầm)</option>
+                                        )}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ fontWeight: 'bold', fontSize: 13 }}>Tài xế *</label>
+                                <select required value={dispatchForm.assignedDriverId}
+                                    onChange={e => {
+                                        const d = drivers.find(dr => dr.id === e.target.value)
+                                        setDispatchForm({ ...dispatchForm, assignedDriverId: e.target.value, assignedDriverName: d?.fullname || '' })
+                                    }}
+                                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
+                                    <option value="">-- Chọn --</option>
+                                    {drivers
+                                        .filter(d => !active.some(o => o.assignedDriverId === d.id))
+                                        .map(d => <option key={d.id} value={d.id}>{d.fullname} (Rảnh)</option>)}
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Đại lý nhận *</label>
-                            <input type="text" required value={dispatchForm.destination}
-                                onChange={e => setDispatchForm({ ...dispatchForm, destination: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginTop: 4 }} />
+
+                        {dispatchForm.vehiclePlate && (
+                            <div style={{ background: '#e8f4fd', padding: '8px 12px', borderRadius: 4, marginTop: 12, fontSize: 13, color: '#2980b9' }}>
+                                <strong>Thông số xe: </strong> {getCompartmentDetails(dispatchForm.vehiclePlate)}
+                            </div>
+                        )}
+
+                        <div style={{ marginTop: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <label style={{ fontWeight: 'bold', fontSize: 13 }}>🗺️ Sơ đồ Hầm xe / Hàng ghép nhiều Công ty</label>
+                                <button type="button" onClick={() => setDispatchForm({ ...dispatchForm, items: [...(dispatchForm.items || []), { product: '', amount: '', compartment: '', destination: '', customerId: '' }] })}
+                                    style={{ padding: '4px 10px', background: '#3498db', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>+ Thêm Hầm</button>
+                            </div>
+
+                            {/* Header của bảng */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 2fr 160px 40px', gap: 8, padding: '4px 8px', background: '#f0f4ff', borderRadius: 4, marginBottom: 6, fontSize: 12, fontWeight: 'bold', color: '#34495e' }}>
+                                <span>Khoang/Hầm</span><span>Công ty nhận (KH)</span><span>Tên hàng hóa</span><span>Số Lít</span><span></span>
+                            </div>
+
+                            {(dispatchForm.items || []).map((item, idx) => (
+                                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 2fr 160px 40px', gap: 8, marginBottom: 8, alignItems: 'center', background: 'white', padding: '8px 8px', borderRadius: 6, border: '1px solid #e0e0e0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                                    {/* Hầm xe */}
+                                    <input type="text" placeholder="VD: K1" value={item.compartment}
+                                        onChange={e => {
+                                            const n = [...dispatchForm.items]; n[idx].compartment = e.target.value; setDispatchForm({ ...dispatchForm, items: n })
+                                        }} style={{ width: '100%', padding: '6px 8px', borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', textAlign: 'center', fontWeight: 'bold' }} />
+
+                                    {/* Chọn Công ty nhận từ danh sách KH */}
+                                    <input list="customer-list" value={item.destination || ''} placeholder="Gõ tìm khách hàng..."
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            const c = customers.find(cu => cu.name === val)
+                                            const n = [...dispatchForm.items]
+                                            n[idx].destination = val
+                                            n[idx].customerId = c ? c.id : ''
+                                            setDispatchForm({ ...dispatchForm, items: n })
+                                        }} style={{ width: '100%', padding: '6px 8px', borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }}
+                                    />
+
+                                    {/* Tên hàng - datalist */}
+                                    <input required list="fuel-products" value={item.product} placeholder="Chọn mặt hàng..."
+                                        onChange={e => {
+                                            const n = [...dispatchForm.items]; n[idx].product = e.target.value; setDispatchForm({ ...dispatchForm, items: n })
+                                        }} style={{ width: '100%', padding: '6px 8px', borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+
+                                    {/* Số Lít */}
+                                    <input type="number" required placeholder="Số Lít" value={item.amount}
+                                        onChange={e => {
+                                            const n = [...dispatchForm.items]; n[idx].amount = e.target.value; setDispatchForm({ ...dispatchForm, items: n })
+                                        }} style={{ width: '100%', padding: '6px 8px', borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+
+                                    <button type="button" onClick={() => {
+                                        if (dispatchForm.items.length === 1) return;
+                                        const n = dispatchForm.items.filter((_, i) => i !== idx); setDispatchForm({ ...dispatchForm, items: n })
+                                    }} style={{ width: 30, height: 30, background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', padding: 0, fontSize: 14 }}>✕</button>
+                                </div>
+                            ))}
+
+                            {/* Tổng kết */}
+                            {(() => {
+                                const totalLit = (dispatchForm.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0)
+                                const destGroups = (dispatchForm.items || []).reduce((groups, i) => {
+                                    if (!i.destination) return groups
+                                    if (!groups[i.destination]) groups[i.destination] = 0
+                                    groups[i.destination] += Number(i.amount) || 0
+                                    return groups
+                                }, {})
+                                return totalLit > 0 ? (
+                                    <div style={{ background: '#eaf4fb', padding: '10px 14px', borderRadius: 6, marginTop: 6, fontSize: 13 }}>
+                                        <strong style={{ color: '#2c3e50' }}>📦 Tổng: {totalLit.toLocaleString()} Lít cho {Object.keys(destGroups).length} công ty:</strong>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                                            {Object.entries(destGroups).map(([name, lits]) => (
+                                                <span key={name} style={{ background: '#d6eaf8', padding: '3px 10px', borderRadius: 20, fontSize: 12, color: '#1a5276' }}>
+                                                    🏢 {name}: <strong>{lits.toLocaleString()}L</strong>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : null
+                            })()}
                         </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Xe bồn *</label>
-                            <select required value={dispatchForm.vehiclePlate}
-                                onChange={e => setDispatchForm({ ...dispatchForm, vehiclePlate: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
-                                <option value="">-- Chọn --</option>
-                                {vehicles.filter(v => v.status === 'active' || v.status === 'Hoạt động').map(v =>
-                                    <option key={v.id} value={v.plateNumber}>{v.plateNumber} ({v.totalCapacity}L - {v.compartments} hầm)</option>
-                                )}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Tài xế *</label>
-                            <select required value={dispatchForm.assignedDriverId}
-                                onChange={e => {
-                                    const d = drivers.find(dr => dr.id === e.target.value)
-                                    setDispatchForm({ ...dispatchForm, assignedDriverId: e.target.value, assignedDriverName: d?.fullname || '' })
-                                }}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
-                                <option value="">-- Chọn --</option>
-                                {drivers
-                                    .filter(d => !active.some(o => o.assignedDriverId === d.id))
-                                    .map(d => <option key={d.id} value={d.id}>{d.fullname} (Rảnh)</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Loại hàng</label>
-                            <input type="text" value={dispatchForm.product}
-                                onChange={e => setDispatchForm({ ...dispatchForm, product: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginTop: 4 }} />
-                        </div>
-                        <div>
-                            <label style={{ fontWeight: 'bold', fontSize: 13 }}>Khối lượng (L)</label>
-                            <input type="number" value={dispatchForm.amount}
-                                onChange={e => setDispatchForm({ ...dispatchForm, amount: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginTop: 4 }} />
-                        </div>
+
+                        <button type="submit" style={{ marginTop: 12, padding: '10px 24px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, fontWeight: 'bold' }}>🚀 Xuất lệnh điều động</button>
+                    </form>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
+                    <h3 style={{ margin: 0 }}>📋 Danh sách Lệnh Điều Động</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', padding: '4px 12px', borderRadius: 8, border: '1px solid #ddd', width: 350, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <span>🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Tìm theo Công ty nhận, Xe hoặc Tài xế..."
+                            value={dispatchSearch}
+                            onChange={e => setDispatchSearch(e.target.value)}
+                            style={{ border: 'none', outline: 'none', width: '100%', padding: '6px 0', fontSize: 13 }}
+                        />
                     </div>
-                    <button type="submit" style={{ marginTop: 12, padding: '10px 24px', background: '#27ae60', color: 'white', border: 'none', borderRadius: 6, fontWeight: 'bold' }}>🚀 Xuất lệnh điều động</button>
-                </form>
-            )}
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', minWidth: 900 }}>
+                        <thead><tr style={{ background: '#f5f5f5' }}>
+                            <th style={{ padding: '10px 12px', textAlign: 'left' }}>Xe & Tài Xế</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px' }}>Danh sách Công ty nhận (Nhiều điểm)</th>
+                            <th style={{ padding: 10 }}>Tổng Lít</th>
+                            <th style={{ padding: 10 }}>Trạng thái</th>
+                            <th style={{ padding: 10 }}>Hành động</th>
+                        </tr></thead>
+                        <tbody>
+                            {deliveryOrders.filter(o => {
+                                if (!dispatchSearch) return true;
+                                const term = dispatchSearch.toLowerCase();
+                                if (o.vehiclePlate && o.vehiclePlate.toLowerCase().includes(term)) return true;
+                                if (o.assignedDriverName && o.assignedDriverName.toLowerCase().includes(term)) return true;
+                                if (o.destination && o.destination.toLowerCase().includes(term)) return true;
+                                if (o.items && o.items.length > 0 && o.items.some(i => i.destination && i.destination.toLowerCase().includes(term))) return true;
+                                return false;
+                            }).map(o => {
+                                // Nhóm hàng theo từng cty nhận trong 1 chuyến
+                                const destGroups = (o.items && o.items.length > 0)
+                                    ? o.items.reduce((acc, i) => {
+                                        const key = i.destination || o.destination || 'Chưa rõ'
+                                        if (!acc[key]) acc[key] = []
+                                        acc[key].push(i)
+                                        return acc
+                                    }, {})
+                                    : { [o.destination || 'Chưa rõ']: [{ product: o.product, amount: o.amount, compartment: '' }] }
 
-            <h3>📋 Danh sách lệnh điều động</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                <thead><tr style={{ background: '#f5f5f5' }}>
-                    <th style={{ padding: 10, textAlign: 'left' }}>Đại lý</th>
-                    <th>Xe</th><th>Tài xế</th><th>Hàng</th><th>Trạng thái</th>
-                </tr></thead>
-                <tbody>
-                    {deliveryOrders.map(o => (
-                        <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                            <td style={{ padding: 10 }}>{o.destination}</td>
-                            <td style={{ textAlign: 'center' }}>{o.vehiclePlate}</td>
-                            <td style={{ textAlign: 'center' }}>{o.assignedDriverName || '-'}</td>
-                            <td style={{ textAlign: 'center' }}>{o.product} ({o.amount}L)</td>
-                            <td style={{ textAlign: 'center' }}>
-                                <span style={{
-                                    padding: '3px 10px', borderRadius: 10, fontSize: 11, fontWeight: 'bold',
-                                    background: o.status === 'completed' ? '#d4edda' : o.status === 'moving' ? '#fff3cd' : '#cce5ff'
-                                }}>{o.status}</span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+                                const totalLit = (o.items && o.items.length > 0)
+                                    ? o.items.reduce((s, i) => s + (Number(i.amount) || 0), 0)
+                                    : Number(o.amount || 0)
+
+                                const statusColor = { completed: '#d4edda', moving: '#fff3cd', arrived: '#d1ecf1', unloading: '#e2d9f3', pending: '#cce5ff' }[o.status] || '#cce5ff'
+
+                                return (
+                                    <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                                        {/* Cột xe + tài xế */}
+                                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                            <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>🚛 {o.vehiclePlate}</div>
+                                            <div style={{ fontSize: 12, color: '#666', marginTop: 3 }}>👤 {o.assignedDriverName || '-'}</div>
+                                            {o.sourceWarehouse && <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>📦 {o.sourceWarehouse}</div>}
+                                        </td>
+
+                                        {/* Cột Danh sách công ty nhận */}
+                                        <td style={{ padding: '10px 12px' }}>
+                                            {Object.entries(destGroups).map(([company, items], i) => (
+                                                <div key={i} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: i < Object.keys(destGroups).length - 1 ? '1px dashed #e0e0e0' : 'none' }}>
+                                                    <div style={{ fontWeight: 'bold', fontSize: 13, color: '#1a5276' }}>🏢 {company}</div>
+                                                    {items.map((item, j) => (
+                                                        <div key={j} style={{ fontSize: 12, color: '#555', marginTop: 2 }}>
+                                                            {item.compartment && <span style={{ background: '#8e44ad', color: 'white', padding: '1px 5px', borderRadius: 3, fontSize: 10, marginRight: 4 }}>{item.compartment}</span>}
+                                                            {item.product} — <strong>{Number(item.amount).toLocaleString()}L</strong>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ))}
+                                        </td>
+
+                                        {/* Tổng lít */}
+                                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#2980b9', whiteSpace: 'nowrap' }}>{totalLit.toLocaleString()} L</td>
+
+                                        {/* Trạng thái */}
+                                        <td style={{ textAlign: 'center' }}>
+                                            <span style={{ padding: '4px 10px', borderRadius: 10, fontSize: 11, fontWeight: 'bold', background: statusColor }}>{o.status}</span>
+                                        </td>
+
+                                        {/* Hành động */}
+                                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                            <button onClick={async () => {
+                                                if (window.confirm(`Xóa lệnh điều động xe ${o.vehiclePlate}?`)) {
+                                                    const res = await deleteDeliveryOrder(o.id);
+                                                    if (res.success) {
+                                                        if (o.orderId) await updateOrder(o.orderId, { status: 'new' });
+                                                        loadAll();
+                                                    } else { alert('❌ Lỗi: ' + res.message); }
+                                                }
+                                            }} style={{ padding: '4px 10px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>🗑️ Xóa</button>
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         )
     }
 
@@ -874,8 +1292,9 @@ function SalesDashboard({ user, onLogout }) {
             case 'overview': return renderOverview()
             case 'crm': return renderCRM()
             case 'orders': return renderOrders()
+            case 'prices': return <PriceManager isReadOnly={true} />
             case 'dispatch': return renderDispatch()
-            case 'tracking': return renderTracking()
+            case 'tracking': return <LiveTrackingMap />
             case 'driver-schedules': return <DriverScheduleManager />
             case 'contracts': return <ContractManager />
             case 'profile': return <Profile currentUser={user} />
@@ -889,8 +1308,12 @@ function SalesDashboard({ user, onLogout }) {
         <div className="dashboard-container">
             <nav className="navbar">
                 <div className="navbar-brand">
-                    <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-                    <h2>🛒 Sale / Điều Vận Dashboard</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ background: 'var(--primary)', color: 'white', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                            <ShoppingCart size={20} />
+                        </div>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, letterSpacing: '-0.5px' }}>Sales & Điều Vận</h2>
+                    </div>
                 </div>
                 <div className="navbar-menu">
                     <NotificationBell userId={user.userId} />
@@ -899,18 +1322,37 @@ function SalesDashboard({ user, onLogout }) {
                 </div>
             </nav>
 
-            {sidebarOpen && <div className="sidebar-overlay show" onClick={() => setSidebarOpen(false)} />}
             <div className="dashboard-content">
-                <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+                <div className="sidebar">
                     <ul className="menu">
-                        {[['overview', '📊 Tổng Quan'], ['crm', '👤 CRM Khách Hàng'], ['orders', '📋 Đơn Hàng'], ['contracts', '📝 Hợp Đồng'], ['dispatch', '🚛 Lệnh Điều Động'], ['tracking', '🗺️ Theo Dõi'], ['driver-schedules', '🗓️ Nhật Ký'], ['profile', '👤 Hồ Sơ']].map(([key, label]) => (
-                            <li key={key} className={`menu-item ${activeMenu === key ? 'active' : ''}`}
-                                onClick={() => { setActiveMenu(key); setSidebarOpen(false) }}>{label}</li>
-                        ))}
+                        <li className="menu-section-title">Kinh doanh & Khách hàng</li>
+                        <li className={`menu-item ${activeMenu === 'overview' ? 'active' : ''}`} onClick={() => setActiveMenu('overview')}><LayoutDashboard size={18} /> Tổng Quan</li>
+                        <li className={`menu-item ${activeMenu === 'crm' ? 'active' : ''}`} onClick={() => setActiveMenu('crm')}><UsersRound size={18} /> CRM Khách Hàng</li>
+                        <li className={`menu-item ${activeMenu === 'orders' ? 'active' : ''}`} onClick={() => setActiveMenu('orders')}><ShoppingCart size={18} /> Đơn Hàng</li>
+                        <li className={`menu-item ${activeMenu === 'prices' ? 'active' : ''}`} onClick={() => setActiveMenu('prices')}><BadgeDollarSign size={18} /> Bảng Giá Xăng Dầu</li>
+                        <li className={`menu-item ${activeMenu === 'contracts' ? 'active' : ''}`} onClick={() => setActiveMenu('contracts')}><FileSignature size={18} /> Hợp Đồng</li>
+
+                        <li className="menu-section-title">Vận tải & Lịch trình</li>
+                        <li className={`menu-item ${activeMenu === 'dispatch' ? 'active' : ''}`} onClick={() => setActiveMenu('dispatch')}><Truck size={18} /> Lệnh Điều Động</li>
+                        <li className={`menu-item ${activeMenu === 'tracking' ? 'active' : ''}`} onClick={() => setActiveMenu('tracking')}><Map size={18} /> Theo Dõi Hành Trình</li>
+                        <li className={`menu-item ${activeMenu === 'driver-schedules' ? 'active' : ''}`} onClick={() => setActiveMenu('driver-schedules')}><CalendarClock size={18} /> Nhật Ký Hoạt Động</li>
+
+                        <li className="menu-section-title">Tài khoản</li>
+                        <li className={`menu-item ${activeMenu === 'profile' ? 'active' : ''}`} onClick={() => setActiveMenu('profile')}><UserCheck size={18} /> Hồ Sơ Cá Nhân</li>
                     </ul>
                 </div>
                 <div className="main-content">{renderContent()}</div>
             </div>
+
+            <datalist id="fuel-products">
+                {[...new Set([...['Xăng RON 95-III', 'Xăng RON 95-V', 'Xăng E5 RON 92', 'Dầu Diesel 0.05S', 'Dầu Diesel 0.001S', 'Dầu KO', 'Dầu Mazut'], ...prices.map(p => p.product).filter(Boolean)])]
+                    .map(p => <option key={p} value={p} />)
+                }
+            </datalist>
+
+            <datalist id="customer-list">
+                {customers.map(c => <option key={c.id} value={c.name} />)}
+            </datalist>
 
             {/* Import Đơn hàng Modal */}
             <ImportDataModal

@@ -64,6 +64,17 @@ export const getAllDeliveryOrders = async () => {
     }
 };
 
+export const deleteDeliveryOrder = async (orderId) => {
+    try {
+        const res = await fetch(`${API_URL}/delivery-orders/${orderId}`, {
+            method: 'DELETE'
+        });
+        return await res.json();
+    } catch (error) {
+        return { success: false, message: error.message };
+    }
+};
+
 export const updateOrderStatus = async (orderId, newStatus, extraData = {}) => {
     try {
         const res = await fetch(`${API_URL}/delivery-orders/${orderId}/status`, {
@@ -125,5 +136,6 @@ export default {
     updateOrderStatus,
     updateOrderDocuments,
     updateOrderSeal,
-    updateOrderApproval
+    updateOrderApproval,
+    deleteDeliveryOrder
 };

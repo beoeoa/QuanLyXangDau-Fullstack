@@ -5,11 +5,13 @@ import {
     updateCustomer,
     deleteCustomer
 } from '../../services/customerService'
+import { logAudit } from '../../services/auditLogService'
 import './AdminModules.css'
 
 function CustomerManager() {
     const [customers, setCustomers] = useState([])
     const [loading, setLoading] = useState(true)
+    const [searchTerm, setSearchTerm] = useState('')
     const [showModal, setShowModal] = useState(false)
     const [editingId, setEditingId] = useState(null)
 
@@ -59,6 +61,7 @@ function CustomerManager() {
         if (window.confirm('Bạn có chắc chắn muốn xóa khách hàng này?')) {
             const result = await deleteCustomer(id)
             if (result.success) {
+                await logAudit('DELETE', `Xóa khách hàng ID: ${id}`)
                 loadCustomers()
             } else {
                 alert('Lỗi khi xóa: ' + result.message)
@@ -67,30 +70,56 @@ function CustomerManager() {
     }
 
     const handleExportExcel = () => {
-        const headers = ['Tên Khách Hàng', 'Số điện thoại', 'Email', 'Địa chỉ', 'Ghi chú'];
-        const csvRows = [];
-        csvRows.push(headers.join(','));
+        const tableHtml = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="utf-8" />
+                <style>
+                    table { border-collapse: collapse; font-family: Arial, sans-serif; }
+                    th { background-color: #1a4f8b; color: #ffffff; font-weight: bold; border: 1px solid #ddd; padding: 10px; text-align: center; }
+                    td { border: 1px solid #ddd; padding: 8px; vertical-align: middle; }
+                    .text { mso-number-format:"\\@"; } 
+                    .center { text-align: center; }
+                    .header-title { font-size: 24px; font-weight: bold; color: #1a4f8b; text-align: left; }
+                </style>
+            </head>
+            <body>
+                <table>
+                    <tr><td colspan="6" class="header-title">DANH SÁCH ĐỐI TÁC KHÁCH HÀNG</td></tr>
+                    <tr><td colspan="6">Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}</td></tr>
+                    <tr><td colspan="6"></td></tr>
+                    <tr>
+                        <th>STT</th>
+                        <th>Tên Khách Hàng</th>
+                        <th>Số điện thoại</th>
+                        <th>Email</th>
+                        <th>Địa chỉ</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                    ${customers.map((c, index) => `
+                        <tr>
+                            <td class="center">${index + 1}</td>
+                            <td><strong>${c.name || ''}</strong></td>
+                            <td class="center text">${c.phone || ''}</td>
+                            <td>${c.email || ''}</td>
+                            <td>${c.address || ''}</td>
+                            <td>${c.note || ''}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </body>
+            </html>
+        `;
 
-        customers.forEach(customer => {
-            const row = [
-                `"${customer.name || ''}"`,
-                `"${customer.phone || ''}"`,
-                `"${customer.email || ''}"`,
-                `"${customer.address || ''}"`,
-                `"${customer.note || ''}"`
-            ];
-            csvRows.push(row.join(','));
-        });
-
-        const csvContent = '\uFEFF' + csvRows.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'Danh_sach_khach_hang.csv');
+        link.href = url;
+        link.download = `Danh_Sach_Khach_Hang_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xls`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 
     const handleSubmit = async (e) => {
@@ -115,11 +144,27 @@ function CustomerManager() {
         }
     }
 
+    const filteredCustomers = customers.filter(c => 
+        !searchTerm || 
+        (c.name && c.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.phone && c.phone.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+
     return (
         <div className="module-container">
-            <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <h2>👥 Quản lý Khách Hàng</h2>
-                <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <h2 style={{ margin: 0 }}>👥 Quản lý Khách Hàng</h2>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', padding: '6px 12px', borderRadius: 6, border: '1px solid #ccc', minWidth: 250 }}>
+                        <span>🔍</span>
+                        <input 
+                            type="text" 
+                            placeholder="Tìm kiếm Khách hàng, SĐT..." 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            style={{ border: 'none', outline: 'none', width: '100%', fontSize: 14 }} 
+                        />
+                    </div>
                     <button className="btn-success" onClick={handleExportExcel} style={{ padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>
                         📥 Xuất Excel
                     </button>
@@ -147,7 +192,9 @@ function CustomerManager() {
                         </tr>
                     </thead>
                     <tbody>
-                        {customers.map(cus => (
+                        {filteredCustomers.length === 0 ? (
+                            <tr><td colSpan="5" style={{ textAlign: 'center', color: '#999', padding: '20px' }}>Không tìm thấy khách hàng nào.</td></tr>
+                        ) : filteredCustomers.map(cus => (
                             <tr key={cus.id}>
                                 <td><strong>{cus.name}</strong></td>
                                 <td>{cus.phone}</td>

@@ -81,6 +81,22 @@ const updateOrderStatus = async (orderId, newStatus, extraData = {}) => {
     return { success: true };
 };
 
+// Lấy 1 đơn theo ID
+const getOrderById = async (orderId) => {
+    const doc = await db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId).get();
+    if (!doc.exists) return null;
+    const data = doc.data();
+    return { id: doc.id, ...data, createdAt: data.createdAt?.toDate?.() || data.createdAt, updatedAt: data.updatedAt?.toDate?.() || data.updatedAt };
+};
+
+// Xóa lệnh điều động
+const deleteDeliveryOrder = async (orderId) => {
+    const docRef = db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId);
+    await docRef.delete();
+    return { success: true };
+};
+
+
 // Cập nhật chứng từ (ảnh seal, biên bản, phiếu...)
 const updateOrderDocuments = async (orderId, documents) => {
     const docRef = db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId);
@@ -140,6 +156,17 @@ const getAllDriverTripStats = async () => {
     return trips;
 };
 
+// Cập nhật tọa độ GPS (Real-time Tracking)
+const updateOrderLocation = async (orderId, lat, lng) => {
+    await db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId).update({
+        currentLat: lat,
+        currentLng: lng,
+        lastLocationUpdate: new Date(),
+        updatedAt: new Date()
+    });
+    return { success: true };
+};
+
 // Kế toán phê duyệt (Maker-Checker)
 const updateOrderApproval = async (orderId, approvalStatus, approvalNote = '') => {
     await db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId).update({
@@ -156,11 +183,14 @@ module.exports = {
     addVehicle,
     createDeliveryOrder,
     getOrdersByDriver,
+    getOrderById,
     getAllDeliveryOrders,
     updateOrderStatus,
     updateOrderDocuments,
     updateOrderSeal,
+    updateOrderLocation,
     getDriverTripStats,
     getAllDriverTripStats,
-    updateOrderApproval
+    updateOrderApproval,
+    deleteDeliveryOrder
 };

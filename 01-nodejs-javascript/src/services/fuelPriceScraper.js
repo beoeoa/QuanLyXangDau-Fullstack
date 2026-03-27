@@ -39,52 +39,71 @@ const DEFAULT_PRICES = [
  */
 const fetchLatestPrices = async () => {
     try {
-        // Thử API tygia.com (public, miễn phí)
-        const response = await fetch('https://tygia.com/json/fuel.json', {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            signal: AbortSignal.timeout(10000)
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+
+        // Lấy mã HTML từ WebGia
+        const response = await axios.get('https://webgia.com/gia-xang-dau/petrolimex/', {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7'
+            },
+            timeout: 10000
         });
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        const html = response.data;
+        const $ = cheerio.load(html);
 
-        if (data && Array.isArray(data.data || data)) {
-            const items = data.data || data;
-            const prices = [];
-
-            items.forEach(item => {
-                const name = item.name || item.ten || '';
-                const price = Number(item.price || item.gia || item.retail_price || 0);
-
-                // Tìm tên chuẩn hóa
-                let mappedName = null;
-                for (const [key, val] of Object.entries(PRODUCT_MAP)) {
-                    if (name.includes(key) || name.toLowerCase().includes(key.toLowerCase())) {
-                        mappedName = val;
-                        break;
+        // Bóc tách bảng giá vùng 1 bằng cheerio
+        const prices = [];
+        
+        $('table.table tbody tr').each((i, row) => {
+            const nameRaw = $(row).find('th').text().trim();
+            const priceRaw = $(row).find('td').eq(0).text().trim().replace(/[^0-9]/g, '');
+            
+            if (nameRaw && priceRaw) {
+                const price = parseInt(priceRaw, 10);
+                if (price > 10000) { // Lọc rác
+                    let mappedName = null;
+                    for (const [key, val] of Object.entries(PRODUCT_MAP)) {
+                        if (nameRaw.includes(key) || nameRaw.toLowerCase().includes(key.toLowerCase())) {
+                            mappedName = val;
+                            break;
+                        }
+                    }
+                    
+                    if (mappedName && !prices.find(p => p.product === mappedName)) {
+                        prices.push({
+                            product: mappedName,
+                            retailPrice: price,
+                            wholesalePrice: Math.round(price * 0.975), // Giá buôn giảm 2.5%
+                            source: 'webgia'
+                        });
                     }
                 }
-
-                if (mappedName && price > 0) {
-                    prices.push({
-                        product: mappedName,
-                        retailPrice: price,
-                        wholesalePrice: Math.round(price * 0.975), // Giá buôn ~97.5% giá lẻ
-                        source: 'api'
-                    });
-                }
-            });
-
-            if (prices.length >= 2) {
-                console.log(`✅ Fetched ${prices.length} fuel prices from API`);
-                return prices;
             }
+        });
+
+        if (prices.length >= 2) {
+            console.log(`✅ Fetched ${prices.length} fuel prices from WebGia`);
+            return prices; // Trả về nếu bóc tách thành công
         }
 
-        throw new Error('Không parse được data từ API');
+        // Nếu regex không tìm thấy (Cấu trúc web thay đổi), fallback đến giá cứng gần đúng
+        throw new Error('Không phân tích (Parse) được Data Bảng giá');
     } catch (err) {
-        console.log(`⚠️ API fetch failed: ${err.message}. Using fallback prices.`);
-        return DEFAULT_PRICES.map(p => ({ ...p, source: 'fallback' }));
+        console.log(`⚠️ Crawl failed: ${err.message}. Using updated fallback prices.`);
+        // Fallback hiện tại (Tương đối update 2024-2025)
+        const FALLBACK_PRICES = [
+            { product: 'Xăng RON 95-III', retailPrice: 24810, wholesalePrice: Math.round(24810 * 0.975) },
+            { product: 'Xăng E5 RON 92', retailPrice: 23620, wholesalePrice: Math.round(23620 * 0.975) },
+            { product: 'Dầu Diesel 0.05S', retailPrice: 21540, wholesalePrice: Math.round(21540 * 0.975) },
+            { product: 'Dầu Diesel 0.001S', retailPrice: 22100, wholesalePrice: Math.round(22100 * 0.975) },
+            { product: 'Dầu KO', retailPrice: 21450, wholesalePrice: Math.round(21450 * 0.975) },
+            { product: 'Dầu Mazut', retailPrice: 16900, wholesalePrice: Math.round(16900 * 0.975) }
+        ];
+        return FALLBACK_PRICES.map(p => ({ ...p, source: 'fallback' }));
     }
 };
 
@@ -162,25 +181,31 @@ const getSyncMeta = async () => {
 };
 
 /**
- * Bắt đầu scheduled sync — chạy mỗi 2 giờ
+ * Bắt đầu scheduled sync — 15h00 Thứ Năm hàng tuần
  */
-let syncInterval = null;
+const cron = require('node-cron');
+let syncTask = null;
+
 const startScheduledSync = () => {
-    // Sync ngay khi khởi động
+    // Sync ngay 1 lần khi khởi động để lấy data mới nhất
     syncPricesToFirestore();
 
-    // Sau đó sync mỗi 2 giờ (7200000ms)
-    syncInterval = setInterval(() => {
-        syncPricesToFirestore();
-    }, 2 * 60 * 60 * 1000);
+    // Lên lịch: 15h00 phút, thứ Năm (4) hàng tuần
+    syncTask = cron.schedule('0 15 * * 4', async () => {
+        console.log('⏰ Bắt đầu đồng bộ giá xăng dầu (Lịch định kỳ: 15h Thứ Năm)');
+        await syncPricesToFirestore();
+    }, {
+        scheduled: true,
+        timezone: "Asia/Ho_Chi_Minh"
+    });
 
-    console.log('⏰ Scheduled fuel price sync: every 2 hours');
+    console.log('⏰ Scheduled fuel price sync: 15:00 every Thursday');
 };
 
 const stopScheduledSync = () => {
-    if (syncInterval) {
-        clearInterval(syncInterval);
-        syncInterval = null;
+    if (syncTask) {
+        syncTask.stop();
+        syncTask = null;
     }
 };
 

@@ -5,11 +5,13 @@ import {
     updateSupplier,
     deleteSupplier
 } from '../../services/supplierService'
+import { logAudit } from '../../services/auditLogService'
 import './AdminModules.css'
 
 function SupplierManager() {
     const [suppliers, setSuppliers] = useState([])
     const [loading, setLoading] = useState(true)
+    const [searchTerm, setSearchTerm] = useState('')
     const [showModal, setShowModal] = useState(false)
     const [editingId, setEditingId] = useState(null)
 
@@ -59,6 +61,7 @@ function SupplierManager() {
         if (window.confirm('Bạn có chắc chắn muốn xóa nhà cung cấp này?')) {
             const result = await deleteSupplier(id)
             if (result.success) {
+                await logAudit('DELETE', `Xóa nhà cung cấp ID: ${id}`);
                 loadSuppliers()
             } else {
                 alert('Lỗi khi xóa: ' + result.message)
@@ -67,30 +70,56 @@ function SupplierManager() {
     }
 
     const handleExportExcel = () => {
-        const headers = ['Tên Nhà Cung Cấp', 'Số điện thoại', 'Email', 'Địa chỉ', 'Ghi chú'];
-        const csvRows = [];
-        csvRows.push(headers.join(','));
+        const tableHtml = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="utf-8" />
+                <style>
+                    table { border-collapse: collapse; font-family: Arial, sans-serif; }
+                    th { background-color: #27ae60; color: #ffffff; font-weight: bold; border: 1px solid #ddd; padding: 10px; text-align: center; }
+                    td { border: 1px solid #ddd; padding: 8px; vertical-align: middle; }
+                    .text { mso-number-format:"\\@"; } 
+                    .center { text-align: center; }
+                    .header-title { font-size: 24px; font-weight: bold; color: #27ae60; text-align: left; }
+                </style>
+            </head>
+            <body>
+                <table>
+                    <tr><td colspan="6" class="header-title">DANH SÁCH TỔNG HỢP NHÀ CUNG CẤP</td></tr>
+                    <tr><td colspan="6">Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}</td></tr>
+                    <tr><td colspan="6"></td></tr>
+                    <tr>
+                        <th>STT</th>
+                        <th>Tên Nhà Cung Cấp</th>
+                        <th>Số điện thoại</th>
+                        <th>Email</th>
+                        <th>Địa chỉ</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                    ${suppliers.map((s, index) => `
+                        <tr>
+                            <td class="center">${index + 1}</td>
+                            <td><strong>${s.name || ''}</strong></td>
+                            <td class="center text">${s.phone || ''}</td>
+                            <td>${s.email || ''}</td>
+                            <td>${s.address || ''}</td>
+                            <td>${s.note || ''}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </body>
+            </html>
+        `;
 
-        suppliers.forEach(supplier => {
-            const row = [
-                `"${supplier.name || ''}"`,
-                `"${supplier.phone || ''}"`,
-                `"${supplier.email || ''}"`,
-                `"${supplier.address || ''}"`,
-                `"${supplier.note || ''}"`
-            ];
-            csvRows.push(row.join(','));
-        });
-
-        const csvContent = '\uFEFF' + csvRows.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'Danh_sach_nha_cung_cap.csv');
+        link.href = url;
+        link.download = `Danh_Sach_Nha_Cung_Cap_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xls`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 
     const handleSubmit = async (e) => {
@@ -99,6 +128,7 @@ function SupplierManager() {
         if (editingId) {
             const result = await updateSupplier(editingId, formData)
             if (result.success) {
+                await logAudit('UPDATE', `Sửa nhà cung cấp: ${formData.name}`);
                 setShowModal(false)
                 loadSuppliers()
             } else {
@@ -107,6 +137,7 @@ function SupplierManager() {
         } else {
             const result = await addSupplier(formData)
             if (result.success) {
+                await logAudit('CREATE', `Thêm mới nhà cung cấp: ${formData.name}`);
                 setShowModal(false)
                 loadSuppliers()
             } else {
@@ -115,11 +146,27 @@ function SupplierManager() {
         }
     }
 
+    const filteredSuppliers = suppliers.filter(s => 
+        !searchTerm || 
+        (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (s.phone && s.phone.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+
     return (
         <div className="module-container">
-            <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <h2>🏭 Quản lý Nhà Cung Cấp</h2>
-                <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <h2 style={{ margin: 0 }}>🏭 Quản lý Nhà Cung Cấp</h2>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', padding: '6px 12px', borderRadius: 6, border: '1px solid #ccc', minWidth: 250 }}>
+                        <span>🔍</span>
+                        <input 
+                            type="text" 
+                            placeholder="Tìm kiếm Nhà cung cấp, SĐT..." 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            style={{ border: 'none', outline: 'none', width: '100%', fontSize: 14 }} 
+                        />
+                    </div>
                     <button className="btn-success" onClick={handleExportExcel} style={{ padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>
                         📥 Xuất Excel
                     </button>
@@ -147,7 +194,9 @@ function SupplierManager() {
                         </tr>
                     </thead>
                     <tbody>
-                        {suppliers.map(sup => (
+                        {filteredSuppliers.length === 0 ? (
+                            <tr><td colSpan="5" style={{ textAlign: 'center', color: '#999', padding: '20px' }}>Không tìm thấy nhà cung cấp nào.</td></tr>
+                        ) : filteredSuppliers.map(sup => (
                             <tr key={sup.id}>
                                 <td><strong>{sup.name}</strong></td>
                                 <td>{sup.phone}</td>

@@ -345,10 +345,55 @@ const getOrdersByDriver = async (req, res) => {
     }
 };
 
+const deleteDeliveryOrderCtrl = async (req, res) => {
+    try {
+        const result = await transportationService.deleteDeliveryOrder(req.params.id);
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
 const updateOrderStatus = async (req, res) => {
     try {
         const { status, ...extraData } = req.body;
         const result = await transportationService.updateOrderStatus(req.params.id, status, extraData);
+
+        // ======================================================
+        // TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI XE BỒN THEO QUY TRÌNH
+        // ======================================================
+        // Lấy thông tin đơn hàng để biết biển số xe
+        try {
+            const order = await transportationService.getOrderById(req.params.id);
+            if (order && order.vehiclePlate) {
+                // Tìm xe theo biển số trong fleet-vehicles
+                const allVehicles = await vehicleService.getAllVehicles();
+                const vehicle = allVehicles.find(v =>
+                    (v.plateNumber || '').toLowerCase() === (order.vehiclePlate || '').toLowerCase()
+                );
+                if (vehicle) {
+                    let newVehicleStatus = null;
+
+                    // Xe BẮT ĐẦU LÀM VIỆC khi tài xế bấm "Đang di chuyển"
+                    if (status === 'moving' || status === 'received' || status === 'arrived' || status === 'unloading') {
+                        newVehicleStatus = 'on_trip'; // 🚚 Đang làm việc
+                    }
+                    // Xe VỀ BÃI khi tài xế bấm "Hoàn thành"
+                    else if (status === 'completed') {
+                        newVehicleStatus = 'available'; // 💤 Sẵn sàng / Nằm bãi
+                    }
+
+                    if (newVehicleStatus) {
+                        await vehicleService.updateVehicle(vehicle.id, { status: newVehicleStatus });
+                        console.log(`[AUTO] Xe ${order.vehiclePlate} → trạng thái: ${newVehicleStatus}`);
+                    }
+                }
+            }
+        } catch (vehicleErr) {
+            // Không để lỗi xe ảnh hưởng đến kết quả cập nhật đơn hàng
+            console.warn('[AUTO] Lỗi cập nhật trạng thái xe tự động:', vehicleErr.message);
+        }
+
         res.json(result);
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -431,6 +476,16 @@ const getAllDeliveryOrdersCtrl = async (req, res) => {
 const updateOrderDocuments = async (req, res) => {
     try {
         const result = await transportationService.updateOrderDocuments(req.params.id, req.body.documents);
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
+const updateOrderLocationCtrl = async (req, res) => {
+    try {
+        const { lat, lng } = req.body;
+        const result = await transportationService.updateOrderLocation(req.params.id, lat, lng);
         res.json(result);
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -777,7 +832,7 @@ module.exports = {
     getTransactions, createTransaction, deleteTransaction,
     getVehicles, addVehicle, createDeliveryOrder,
     getOrdersByDriver, updateOrderStatus,
-    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderSeal, updateOrderApproval,
+    getAllDeliveryOrdersCtrl, updateOrderDocuments, updateOrderLocationCtrl, updateOrderSeal, updateOrderApproval, deleteDeliveryOrderCtrl,
     getDriverTripStatsCtrl, getAllDriverTripStatsCtrl,
     // Audit Logs
     getAuditLogsCtrl, createAuditLog,

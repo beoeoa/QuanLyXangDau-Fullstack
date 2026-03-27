@@ -26,4 +26,22 @@ export const createAuditLog = async (logData) => {
     }
 };
 
-export default { getAuditLogs, createAuditLog };
+// Hàm tiện ích: tự động lấy user từ localStorage
+export const logAudit = async (action, details) => {
+    try {
+        const userStr = localStorage.getItem('user');
+        const user = userStr ? JSON.parse(userStr) : null;
+        const userName = user ? (user.name || user.email || 'Người dùng') : 'Hệ thống';
+
+        await createAuditLog({
+            action,
+            details,
+            userName,
+            timestamp: new Date().toISOString()
+        });
+    } catch (e) {
+        console.error('Lỗi khi ghi Audit Log:', e);
+    }
+};
+
+export default { getAuditLogs, createAuditLog, logAudit };

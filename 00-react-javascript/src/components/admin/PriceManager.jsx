@@ -9,7 +9,7 @@ const PRODUCTS = [
     'Dầu Diesel 0.05S', 'Dầu Diesel 0.001S', 'Dầu KO', 'Dầu Mazut'
 ]
 
-function PriceManager() {
+function PriceManager({ isReadOnly = false }) {
     const [prices, setPrices] = useState([])
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
@@ -120,20 +120,22 @@ function PriceManager() {
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                 <h2>💰 Bảng Giá Xăng Dầu</h2>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={handleSync} disabled={syncing}
-                        style={{
-                            padding: '8px 16px', background: syncing ? '#95a5a6' : '#27ae60', color: 'white',
-                            border: 'none', borderRadius: 6, cursor: syncing ? 'wait' : 'pointer',
-                            display: 'flex', alignItems: 'center', gap: 6
-                        }}>
-                        {syncing ? '⏳ Đang đồng bộ...' : '🔄 Đồng bộ giá Nhà nước'}
-                    </button>
-                    <button onClick={() => { setShowForm(!showForm); setEditing(null); setForm({ product: '', retailPrice: '', wholesalePrice: '', discount: '', effectiveDate: '' }) }}
-                        style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-                        {showForm ? '✕ Đóng' : '+ Thêm giá nội bộ'}
-                    </button>
-                </div>
+                {!isReadOnly && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={handleSync} disabled={syncing}
+                            style={{
+                                padding: '8px 16px', background: syncing ? '#95a5a6' : '#27ae60', color: 'white',
+                                border: 'none', borderRadius: 6, cursor: syncing ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: 6
+                            }}>
+                            {syncing ? '⏳ Đang đồng bộ...' : '🔄 Đồng bộ giá Nhà nước'}
+                        </button>
+                        <button onClick={() => { setShowForm(!showForm); setEditing(null); setForm({ product: '', retailPrice: '', wholesalePrice: '', discount: '', effectiveDate: '' }) }}
+                            style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                            {showForm ? '✕ Đóng' : '+ Thêm giá nội bộ'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Sync status banner */}
@@ -166,11 +168,12 @@ function PriceManager() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div>
                             <label style={{ fontWeight: 'bold', fontSize: 13 }}>Loại sản phẩm *</label>
-                            <select required value={form.product} onChange={e => setForm({ ...form, product: e.target.value })}
-                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4 }}>
-                                <option value="">-- Chọn --</option>
-                                {PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
+                            <input required list="fuel-products" value={form.product} onChange={e => setForm({ ...form, product: e.target.value })}
+                                placeholder="Chọn hoặc nhập tên sản phẩm mới..."
+                                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', marginTop: 4, boxSizing: 'border-box' }} />
+                            <datalist id="fuel-products">
+                                {PRODUCTS.map(p => <option key={p} value={p} />)}
+                            </datalist>
                         </div>
                         <div>
                             <label style={{ fontWeight: 'bold', fontSize: 13 }}>Ngày hiệu lực *</label>
@@ -258,7 +261,7 @@ function PriceManager() {
                             <th>Giá buôn (đ/lít)</th>
                             <th>Chiết khấu</th>
                             <th>Ngày hiệu lực</th>
-                            <th>Hành động</th>
+                            {!isReadOnly && <th>Hành động</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -271,10 +274,12 @@ function PriceManager() {
                                 <td style={{ textAlign: 'center' }}>{p.wholesalePrice ? Number(p.wholesalePrice).toLocaleString() : '-'}</td>
                                 <td style={{ textAlign: 'center' }}>{p.discount ? Number(p.discount).toLocaleString() : '-'}</td>
                                 <td style={{ textAlign: 'center' }}>{p.effectiveDate || '-'}</td>
-                                <td style={{ textAlign: 'center' }}>
-                                    <button onClick={() => handleEdit(p)} style={{ padding: '4px 10px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, marginRight: 4 }}>✏️</button>
-                                    <button onClick={() => handleDelete(p.id)} style={{ padding: '4px 10px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>🗑️</button>
-                                </td>
+                                {!isReadOnly && (
+                                    <td style={{ textAlign: 'center' }}>
+                                        <button onClick={() => handleEdit(p)} style={{ padding: '4px 10px', background: '#f39c12', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, marginRight: 4 }}>✏️</button>
+                                        <button onClick={() => handleDelete(p.id)} style={{ padding: '4px 10px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>🗑️</button>
+                                    </td>
+                                )}
                             </tr>
                         ))}
                     </tbody>
