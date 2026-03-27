@@ -1,6 +1,21 @@
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
-const LAN_IP = '192.168.1.33'; // <-- IP LAN máy tính, sửa khi đổi mạng
+// Luôn tự động lấy địa chỉ IP của máy tính đang chạy Expo thay vì fix cứng.
+// (Giúp đi demo mang laptop sang WiFi khác như trên trường vẫn tự nhận đúng IP)
+const getLocalIp = () => {
+  try {
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/http:\/\/([^:]+):/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+  } catch (e) {}
+  return '192.168.1.33'; // Fallback nếu thất bại
+};
+
+const LAN_IP = getLocalIp();
 
 const getApiUrl = () => {
   // Allow override via env (Expo): EXPO_PUBLIC_API_URL=http://<ip>:8080/api
@@ -8,8 +23,8 @@ const getApiUrl = () => {
   if (envUrl && typeof envUrl === 'string') return envUrl;
 
   if (__DEV__) {
-    // Luôn dùng IP LAN để cả Emulator lẫn Thiết bị thật đều kết nối được
-    return `http://${LAN_IP}:8080/api`;
+    // URL cố định của backend trên Render (production)
+    return 'https://quanlyxangdau-fullstack.onrender.com/api';
   }
   return 'https://api.yourbackend.com/api';
 };
@@ -111,6 +126,18 @@ export const fetchTransactions = async () => {
     return await res.json();
   } catch (error) {
     console.error('Lỗi tải Transactions:', error);
+    return [];
+  }
+};
+
+// 4.8️⃣ Lấy tất cả Nhân viên (Users)
+export const fetchUsers = async () => {
+  try {
+    const res = await fetch(`${API_URL}/users`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (error) {
+    console.error('Lỗi tải Users:', error);
     return [];
   }
 };

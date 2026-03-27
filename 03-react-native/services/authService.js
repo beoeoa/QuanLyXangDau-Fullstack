@@ -5,18 +5,31 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth'
 import { auth } from './firebaseConfig'
-import { Platform } from 'react-native'
+import { Platform, NativeModules } from 'react-native'
 
-// Đồng bộ API_URL với dataService.ts
-const LAN_IP = '192.168.1.33' // <-- IP LAN máy tính, sửa khi đổi mạng
+// Tự động nhận diện IP LAN của máy tính đang chạy Expo
+const getLocalIp = () => {
+  try {
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/http:\/\/([^:]+):/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+  } catch (e) {}
+  return '192.168.1.33';
+};
+
+const LAN_IP = getLocalIp();
 
 const getApiUrl = () => {
   const envUrl = typeof process !== 'undefined' ? process?.env?.EXPO_PUBLIC_API_URL : null
   if (envUrl && typeof envUrl === 'string') return envUrl
 
   if (__DEV__) {
-    // Luôn dùng IP LAN để cả Emulator lẫn Thiết bị thật đều kết nối được
-    return `http://${LAN_IP}:8080/api`
+    // URL cố định của backend trên Render (production)
+    return 'https://quanlyxangdau-fullstack.onrender.com/api'
   }
   return 'https://api.yourbackend.com/api'
 }
