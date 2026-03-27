@@ -5,7 +5,7 @@
  * Chạy lệnh: node scripts/mockDataFull.js
  */
 
-const API_URL = 'http://localhost:8080/api';
+const API_URL = 'https://quanlyxangdau-fullstack.onrender.com/api';
 
 // Hàm helper để tạo ngày ngẫu nhiên trong khoảng {days} ngày gần đây
 const randomDate = (daysAgo) => new Date(Date.now() - Math.floor(Math.random() * daysAgo * 24 * 60 * 60 * 1000)).toISOString();
