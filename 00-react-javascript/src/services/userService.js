@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Lấy tất cả users
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Láº¥y táº¥t cáº£ users
 export const getAllUsers = async () => {
   try {
     const res = await fetch(`${API_URL}/users`);
@@ -11,7 +11,7 @@ export const getAllUsers = async () => {
   }
 };
 
-// Lấy user theo ID
+// Láº¥y user theo ID
 export const getUserById = async (userId) => {
   try {
     const res = await fetch(`${API_URL}/users/${userId}`);
@@ -23,7 +23,7 @@ export const getUserById = async (userId) => {
   }
 };
 
-// Lấy user theo email
+// Láº¥y user theo email
 export const getUserByEmail = async (email) => {
   try {
     const res = await fetch(`${API_URL}/users/email?email=${encodeURIComponent(email)}`);
@@ -35,7 +35,7 @@ export const getUserByEmail = async (email) => {
   }
 };
 
-// Đăng ký user (lưu vào Firestore qua backend)
+// ÄÄƒng kÃ½ user (lÆ°u vÃ o Firestore qua backend)
 export const registerUser = async (userData) => {
   try {
     const res = await fetch(`${API_URL}/users/register`, {
@@ -46,11 +46,11 @@ export const registerUser = async (userData) => {
     return await res.json();
   } catch (error) {
     console.error('Register error:', error);
-    return { success: false, message: error.message || 'Lỗi đăng ký' };
+    return { success: false, message: error.message || 'Lá»—i Ä‘Äƒng kÃ½' };
   }
 };
 
-// Cập nhật user
+// Cáº­p nháº­t user
 export const updateUser = async (userId, updateData) => {
   try {
     const res = await fetch(`${API_URL}/users/${userId}`, {
@@ -65,7 +65,7 @@ export const updateUser = async (userId, updateData) => {
   }
 };
 
-// Xóa user
+// XÃ³a user
 export const deleteUser = async (userId) => {
   try {
     const res = await fetch(`${API_URL}/users/${userId}`, {
@@ -78,7 +78,7 @@ export const deleteUser = async (userId) => {
   }
 };
 
-// Lấy users theo role
+// Láº¥y users theo role
 export const getUsersByRole = async (role) => {
   try {
     const res = await fetch(`${API_URL}/users/role/${role}`);
@@ -89,7 +89,7 @@ export const getUsersByRole = async (role) => {
   }
 };
 
-// Tìm users
+// TÃ¬m users
 export const searchUsers = async (searchField, searchValue) => {
   try {
     const res = await fetch(`${API_URL}/users/search?field=${searchField}&value=${encodeURIComponent(searchValue)}`);
@@ -100,7 +100,7 @@ export const searchUsers = async (searchField, searchValue) => {
   }
 };
 
-// Đếm tổng users
+// Äáº¿m tá»•ng users
 export const countUsers = async () => {
   try {
     const users = await getAllUsers();
@@ -111,7 +111,7 @@ export const countUsers = async () => {
   }
 };
 
-// Đếm users theo role
+// Äáº¿m users theo role
 export const countUsersByRole = async (role) => {
   try {
     const users = await getUsersByRole(role);
@@ -134,3 +134,4 @@ export default {
   countUsers,
   countUsersByRole
 };
+

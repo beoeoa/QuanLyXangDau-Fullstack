@@ -1,5 +1,5 @@
-const API_URL = 'http://localhost:8080/api';
-
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 export const getAllShipments = async () => {
     try {
         const res = await fetch(`${API_URL}/shipments`);
@@ -40,3 +40,4 @@ export const getGovWarehouses = async () => {
         return await res.json();
     } catch (error) { return []; }
 };
+

@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Thêm chi phí dọc đường
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// ThÃªm chi phÃ­ dá»c Ä‘Æ°á»ng
 export const addDriverExpense = async (data) => {
     try {
         const res = await fetch(`${API_URL}/driver-expenses`, {
@@ -12,7 +12,7 @@ export const addDriverExpense = async (data) => {
     } catch (e) { return { success: false, message: e.message }; }
 };
 
-// Lấy chi phí theo tài xế
+// Láº¥y chi phÃ­ theo tÃ i xáº¿
 export const getExpensesByDriver = async (driverId) => {
     try {
         const res = await fetch(`${API_URL}/driver-expenses/driver/${driverId}`);
@@ -20,7 +20,7 @@ export const getExpensesByDriver = async (driverId) => {
     } catch (e) { return []; }
 };
 
-// Lấy tất cả chi phí (Kế toán)
+// Láº¥y táº¥t cáº£ chi phÃ­ (Káº¿ toÃ¡n)
 export const getAllExpenses = async () => {
     try {
         const res = await fetch(`${API_URL}/driver-expenses`);
@@ -28,7 +28,7 @@ export const getAllExpenses = async () => {
     } catch (e) { return []; }
 };
 
-// Duyệt chi phí
+// Duyá»‡t chi phÃ­
 export const updateExpenseStatus = async (id, status) => {
     try {
         const res = await fetch(`${API_URL}/driver-expenses/${id}/status`, {
@@ -39,3 +39,4 @@ export const updateExpenseStatus = async (id, status) => {
         return await res.json();
     } catch (e) { return { success: false, message: e.message }; }
 };
+

@@ -1,5 +1,5 @@
-const API_URL = 'http://localhost:8080/api';
-
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 export const createOrder = async (data) => {
     try {
         const res = await fetch(`${API_URL}/orders`, {
@@ -35,3 +35,4 @@ export const deleteOrder = async (id) => {
         return await res.json();
     } catch (e) { return { success: false, message: e.message }; }
 };
+

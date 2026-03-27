@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Lấy danh sách audit logs
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Láº¥y danh sÃ¡ch audit logs
 export const getAuditLogs = async (limit = 100) => {
     try {
         const res = await fetch(`${API_URL}/audit-logs?limit=${limit}`);
@@ -11,7 +11,7 @@ export const getAuditLogs = async (limit = 100) => {
     }
 };
 
-// Ghi audit log mới
+// Ghi audit log má»›i
 export const createAuditLog = async (logData) => {
     try {
         const res = await fetch(`${API_URL}/audit-logs`, {
@@ -26,12 +26,12 @@ export const createAuditLog = async (logData) => {
     }
 };
 
-// Hàm tiện ích: tự động lấy user từ localStorage
+// HÃ m tiá»‡n Ã­ch: tá»± Ä‘á»™ng láº¥y user tá»« localStorage
 export const logAudit = async (action, details) => {
     try {
         const userStr = localStorage.getItem('user');
         const user = userStr ? JSON.parse(userStr) : null;
-        const userName = user ? (user.name || user.email || 'Người dùng') : 'Hệ thống';
+        const userName = user ? (user.name || user.email || 'NgÆ°á»i dÃ¹ng') : 'Há»‡ thá»‘ng';
 
         await createAuditLog({
             action,
@@ -40,8 +40,9 @@ export const logAudit = async (action, details) => {
             timestamp: new Date().toISOString()
         });
     } catch (e) {
-        console.error('Lỗi khi ghi Audit Log:', e);
+        console.error('Lá»—i khi ghi Audit Log:', e);
     }
 };
 
 export default { getAuditLogs, createAuditLog, logAudit };
+

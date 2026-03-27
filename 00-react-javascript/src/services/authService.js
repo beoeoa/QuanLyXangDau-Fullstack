@@ -1,3 +1,5 @@
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -10,17 +12,17 @@ import {
 import { auth } from '../firebase'
 
 // ============================================================
-// AUTH SERVICE - Xác thực người dùng
-// Firebase Auth vẫn chạy ở Frontend (xác thực)
-// Firestore data => gọi qua Backend API
+// AUTH SERVICE - XÃ¡c thá»±c ngÆ°á»i dÃ¹ng
+// Firebase Auth váº«n cháº¡y á»Ÿ Frontend (xÃ¡c thá»±c)
+// Firestore data => gá»i qua Backend API
 // ============================================================
 
-const API_URL = 'http://localhost:8080/api'
+
 
 const googleProvider = new GoogleAuthProvider()
 const facebookProvider = new FacebookAuthProvider()
 
-// Helper: Tạo hoặc lấy user doc qua Backend
+// Helper: Táº¡o hoáº·c láº¥y user doc qua Backend
 const getOrCreateUserDoc = async (user, additionalData = {}) => {
   const res = await fetch(`${API_URL}/users/get-or-create`, {
     method: 'POST',
@@ -28,19 +30,19 @@ const getOrCreateUserDoc = async (user, additionalData = {}) => {
     body: JSON.stringify({
       uid: user.uid,
       email: user.email,
-      fullname: user.displayName || 'Người Dùng',
+      fullname: user.displayName || 'NgÆ°á»i DÃ¹ng',
       photoURL: user.photoURL || null,
       ...additionalData
     })
   })
   if (!res.ok) {
     const errData = await res.json()
-    throw new Error(errData.message || errData.error || 'Lỗi từ Backend')
+    throw new Error(errData.message || errData.error || 'Lá»—i tá»« Backend')
   }
   return await res.json()
 }
 
-// ✅ Đăng ký với Email/Password
+// âœ… ÄÄƒng kÃ½ vá»›i Email/Password
 export const registerWithEmail = async (email, password, userData) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
@@ -67,35 +69,35 @@ export const registerWithEmail = async (email, password, userData) => {
         return {
           success: true,
           userId: user.uid,
-          message: '⚠️ Đăng ký Auth OK nhưng LỖI lưu dữ liệu: ' + (result.message || '')
+          message: 'âš ï¸ ÄÄƒng kÃ½ Auth OK nhÆ°ng Lá»–I lÆ°u dá»¯ liá»‡u: ' + (result.message || '')
         }
       }
     } catch (firestoreErr) {
-      console.error('❌ Backend save error:', firestoreErr.message)
+      console.error('âŒ Backend save error:', firestoreErr.message)
       return {
         success: true,
         userId: user.uid,
-        message: '⚠️ Đăng ký Auth OK nhưng LỖI lưu dữ liệu: ' + firestoreErr.message
+        message: 'âš ï¸ ÄÄƒng kÃ½ Auth OK nhÆ°ng Lá»–I lÆ°u dá»¯ liá»‡u: ' + firestoreErr.message
       }
     }
 
     return {
       success: true,
       userId: user.uid,
-      message: 'Đăng ký thành công, vui lòng chờ Admin duyệt.'
+      message: 'ÄÄƒng kÃ½ thÃ nh cÃ´ng, vui lÃ²ng chá» Admin duyá»‡t.'
     }
   } catch (error) {
-    console.error('❌ Register error:', error)
-    let message = error.message || 'Lỗi đăng ký'
-    if (error.code === 'auth/email-already-in-use') message = 'Email đã được sử dụng'
-    else if (error.code === 'auth/weak-password') message = 'Mật khẩu quá yếu (tối thiểu 6 ký tự)'
-    else if (error.code === 'auth/invalid-email') message = 'Email không hợp lệ'
+    console.error('âŒ Register error:', error)
+    let message = error.message || 'Lá»—i Ä‘Äƒng kÃ½'
+    if (error.code === 'auth/email-already-in-use') message = 'Email Ä‘Ã£ Ä‘Æ°á»£c sá»­ dá»¥ng'
+    else if (error.code === 'auth/weak-password') message = 'Máº­t kháº©u quÃ¡ yáº¿u (tá»‘i thiá»ƒu 6 kÃ½ tá»±)'
+    else if (error.code === 'auth/invalid-email') message = 'Email khÃ´ng há»£p lá»‡'
 
     return { success: false, message }
   }
 }
 
-// ✅ Đăng nhập với Email/Password
+// âœ… ÄÄƒng nháº­p vá»›i Email/Password
 export const loginWithEmail = async (email, password) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
@@ -111,32 +113,32 @@ export const loginWithEmail = async (email, password) => {
       role: userData.role,
       isApproved: userData.isApproved,
       isProfileUpdated: !!(userData.phone && userData.address && userData.cccd),
-      message: 'Đăng nhập thành công'
+      message: 'ÄÄƒng nháº­p thÃ nh cÃ´ng'
     }
   } catch (error) {
-    console.error('❌ Login error:', error.code, error.message, error)
+    console.error('âŒ Login error:', error.code, error.message, error)
 
-    // Nếu lỗi do mất API backend (TypeError: Failed to fetch)
+    // Náº¿u lá»—i do máº¥t API backend (TypeError: Failed to fetch)
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      return { success: false, message: 'Không thể kết nối với Backend Server (Failed to fetch). Hãy kiểm tra Server Node.js đã chạy trên port 8888 chưa.' }
+      return { success: false, message: 'KhÃ´ng thá»ƒ káº¿t ná»‘i vá»›i Backend Server (Failed to fetch). HÃ£y kiá»ƒm tra Server Node.js Ä‘Ã£ cháº¡y trÃªn port 8888 chÆ°a.' }
     }
 
-    // Nếu lỗi kết nối API Database báo về
+    // Náº¿u lá»—i káº¿t ná»‘i API Database bÃ¡o vá»
     if (!error.code) {
-      return { success: false, message: `Lỗi Backend API: ${error.message}` }
+      return { success: false, message: `Lá»—i Backend API: ${error.message}` }
     }
 
-    let message = 'Email hoặc mật khẩu không chính xác'
-    if (error.code === 'auth/user-not-found') message = 'Email không tồn tại'
-    else if (error.code === 'auth/wrong-password') message = 'Mật khẩu không chính xác'
-    else if (error.code === 'auth/invalid-email') message = 'Email không hợp lệ'
-    else if (error.code === 'auth/invalid-credential') message = 'Thông tin đăng nhập không chính xác'
+    let message = 'Email hoáº·c máº­t kháº©u khÃ´ng chÃ­nh xÃ¡c'
+    if (error.code === 'auth/user-not-found') message = 'Email khÃ´ng tá»“n táº¡i'
+    else if (error.code === 'auth/wrong-password') message = 'Máº­t kháº©u khÃ´ng chÃ­nh xÃ¡c'
+    else if (error.code === 'auth/invalid-email') message = 'Email khÃ´ng há»£p lá»‡'
+    else if (error.code === 'auth/invalid-credential') message = 'ThÃ´ng tin Ä‘Äƒng nháº­p khÃ´ng chÃ­nh xÃ¡c'
 
     return { success: false, message }
   }
 }
 
-// ✅ Đăng nhập với Google
+// âœ… ÄÄƒng nháº­p vá»›i Google
 export const loginWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider)
@@ -152,7 +154,7 @@ export const loginWithGoogle = async () => {
       role: userData.role,
       isApproved: userData.isApproved,
       isProfileUpdated: !!(userData.phone && userData.address && userData.cccd),
-      message: 'Đăng nhập Google thành công'
+      message: 'ÄÄƒng nháº­p Google thÃ nh cÃ´ng'
     }
   } catch (error) {
     console.error('Google login error:', error)
@@ -160,7 +162,7 @@ export const loginWithGoogle = async () => {
   }
 }
 
-// ✅ Đăng nhập với Facebook
+// âœ… ÄÄƒng nháº­p vá»›i Facebook
 export const loginWithFacebook = async () => {
   try {
     const result = await signInWithPopup(auth, facebookProvider)
@@ -176,7 +178,7 @@ export const loginWithFacebook = async () => {
       role: userData.role,
       isApproved: userData.isApproved,
       isProfileUpdated: !!(userData.phone && userData.address && userData.cccd),
-      message: 'Đăng nhập Facebook thành công'
+      message: 'ÄÄƒng nháº­p Facebook thÃ nh cÃ´ng'
     }
   } catch (error) {
     console.error('Facebook login error:', error)
@@ -184,37 +186,37 @@ export const loginWithFacebook = async () => {
   }
 }
 
-// ✅ Đăng xuất
+// âœ… ÄÄƒng xuáº¥t
 export const logout = async () => {
   try {
     await signOut(auth)
-    return { success: true, message: 'Đăng xuất thành công' }
+    return { success: true, message: 'ÄÄƒng xuáº¥t thÃ nh cÃ´ng' }
   } catch (error) {
     console.error('Logout error:', error)
     return { success: false, message: error.message }
   }
 }
 
-// ✅ Quên mật khẩu
+// âœ… QuÃªn máº­t kháº©u
 export const resetPassword = async (email) => {
   try {
     await sendPasswordResetEmail(auth, email)
-    return { success: true, message: 'Đường dẫn đặt lại mật khẩu đã được gửi! Vui lòng kiểm tra hộp thư đến (và mục Spam) của email: ' + email }
+    return { success: true, message: 'ÄÆ°á»ng dáº«n Ä‘áº·t láº¡i máº­t kháº©u Ä‘Ã£ Ä‘Æ°á»£c gá»­i! Vui lÃ²ng kiá»ƒm tra há»™p thÆ° Ä‘áº¿n (vÃ  má»¥c Spam) cá»§a email: ' + email }
   } catch (error) {
     console.error('Reset password error:', error)
-    let message = 'Lỗi hệ thống khi gửi email đặt lại mật khẩu.'
-    if (error.code === 'auth/user-not-found') message = 'Email không tồn tại trong hệ thống. Vui lòng kiểm tra lại.'
-    else if (error.code === 'auth/invalid-email') message = 'Định dạng email không hợp lệ.'
+    let message = 'Lá»—i há»‡ thá»‘ng khi gá»­i email Ä‘áº·t láº¡i máº­t kháº©u.'
+    if (error.code === 'auth/user-not-found') message = 'Email khÃ´ng tá»“n táº¡i trong há»‡ thá»‘ng. Vui lÃ²ng kiá»ƒm tra láº¡i.'
+    else if (error.code === 'auth/invalid-email') message = 'Äá»‹nh dáº¡ng email khÃ´ng há»£p lá»‡.'
     return { success: false, message }
   }
 }
 
-// ✅ Lắng nghe thay đổi auth state
+// âœ… Láº¯ng nghe thay Ä‘á»•i auth state
 export const onAuthStateChanged = (callback) => {
   return auth.onAuthStateChanged(callback)
 }
 
-// ✅ Kiểm tra role của user qua Backend API
+// âœ… Kiá»ƒm tra role cá»§a user qua Backend API
 export const verifyUserRole = async (userId, expectedRole) => {
   try {
     const res = await fetch(`${API_URL}/users/verify-role`, {
@@ -225,6 +227,7 @@ export const verifyUserRole = async (userId, expectedRole) => {
     return await res.json()
   } catch (error) {
     console.error('Verify role error:', error)
-    return { success: false, message: 'Lỗi kiểm tra vai trò' }
+    return { success: false, message: 'Lá»—i kiá»ƒm tra vai trÃ²' }
   }
 }
+

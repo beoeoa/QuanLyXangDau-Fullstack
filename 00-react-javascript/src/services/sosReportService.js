@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Tạo SOS
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Táº¡o SOS
 export const createSOSReport = async (data) => {
     try {
         const res = await fetch(`${API_URL}/sos-reports`, {
@@ -12,7 +12,7 @@ export const createSOSReport = async (data) => {
     } catch (e) { return { success: false, message: e.message }; }
 };
 
-// Lấy SOS theo tài xế
+// Láº¥y SOS theo tÃ i xáº¿
 export const getSOSByDriver = async (driverId) => {
     try {
         const res = await fetch(`${API_URL}/sos-reports/driver/${driverId}`);
@@ -20,7 +20,7 @@ export const getSOSByDriver = async (driverId) => {
     } catch (e) { return []; }
 };
 
-// Lấy tất cả SOS
+// Láº¥y táº¥t cáº£ SOS
 export const getAllSOSReports = async () => {
     try {
         const res = await fetch(`${API_URL}/sos-reports`);
@@ -28,7 +28,7 @@ export const getAllSOSReports = async () => {
     } catch (e) { return []; }
 };
 
-// Cập nhật SOS
+// Cáº­p nháº­t SOS
 export const updateSOSStatus = async (id, status) => {
     try {
         const res = await fetch(`${API_URL}/sos-reports/${id}/status`, {
@@ -39,3 +39,4 @@ export const updateSOSStatus = async (id, status) => {
         return await res.json();
     } catch (e) { return { success: false, message: e.message }; }
 };
+

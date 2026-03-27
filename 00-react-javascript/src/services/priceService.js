@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Lấy tất cả bảng giá
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Láº¥y táº¥t cáº£ báº£ng giÃ¡
 export const getAllPrices = async () => {
     try {
         const res = await fetch(`${API_URL}/fuel-prices`);
@@ -11,7 +11,7 @@ export const getAllPrices = async () => {
     }
 };
 
-// Thêm giá mới
+// ThÃªm giÃ¡ má»›i
 export const addPrice = async (data) => {
     try {
         const res = await fetch(`${API_URL}/fuel-prices`, {
@@ -25,7 +25,7 @@ export const addPrice = async (data) => {
     }
 };
 
-// Cập nhật giá
+// Cáº­p nháº­t giÃ¡
 export const updatePrice = async (id, data) => {
     try {
         const res = await fetch(`${API_URL}/fuel-prices/${id}`, {
@@ -39,7 +39,7 @@ export const updatePrice = async (id, data) => {
     }
 };
 
-// Xóa giá
+// XÃ³a giÃ¡
 export const deletePrice = async (id) => {
     try {
         const res = await fetch(`${API_URL}/fuel-prices/${id}`, { method: 'DELETE' });
@@ -49,7 +49,7 @@ export const deletePrice = async (id) => {
     }
 };
 
-// Lấy giá hiện hành theo sản phẩm
+// Láº¥y giÃ¡ hiá»‡n hÃ nh theo sáº£n pháº©m
 export const getCurrentPrice = async (product) => {
     try {
         const res = await fetch(`${API_URL}/fuel-prices/current/${encodeURIComponent(product)}`);
@@ -58,3 +58,4 @@ export const getCurrentPrice = async (product) => {
         return null;
     }
 };
+

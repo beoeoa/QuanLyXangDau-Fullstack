@@ -9,7 +9,9 @@ import { sendAppNotification } from '../../services/notificationService'
 import Profile from '../Profile'
 import './AdminModules.css'
 
-const API_URL = 'http://localhost:8080/api'
+import API_BASE from '../../services/apiConfig'
+
+const API_URL = API_BASE
 
 // Component tĩnh để xem thống kê tài xế
 function DriverStatsView({ driver, onClose }) {
@@ -119,7 +121,7 @@ function EmployeeManager() {
     const [users, setUsers] = useState([])
     const [statsDriver, setStatsDriver] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [activeTab, setActiveTab] = useState('pending') // 'pending', 'approved'
+    const [activeTab, setActiveTab] = useState('driver') // 'pending', 'driver', 'sales', 'accountant', 'admin'
     const [searchTerm, setSearchTerm] = useState('')
     const [editingUser, setEditingUser] = useState(null) // State mở Modal sửa user
 
@@ -212,7 +214,7 @@ function EmployeeManager() {
                         <th>Lương Căn Bản</th>
                         <th>Thông tin Thanh toán</th>
                     </tr>
-                    ${approvedUsers.map((user, index) => `
+                    ${approvedExcelUsers.map((user, index) => `
                         <tr>
                             <td class="center">${index + 1}</td>
                             <td class="center text">${user.employeeId || 'Chưa cấp'}</td>
@@ -245,8 +247,21 @@ function EmployeeManager() {
         URL.revokeObjectURL(url);
     }
 
-    const pendingUsers = users.filter(u => u.isApproved === false && u.role !== 'admin' && (!searchTerm || (u.fullname && u.fullname.toLowerCase().includes(searchTerm.toLowerCase())) || (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) || (u.phone && u.phone.includes(searchTerm))))
-    const approvedUsers = users.filter(u => u.isApproved !== false && (!searchTerm || (u.fullname && u.fullname.toLowerCase().includes(searchTerm.toLowerCase())) || (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) || (u.phone && u.phone.includes(searchTerm)) || (u.employeeId && String(u.employeeId).toLowerCase().includes(searchTerm.toLowerCase()))))
+    const matchSearch = (u) => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        return (u.fullname && u.fullname.toLowerCase().includes(s)) || 
+               (u.email && u.email.toLowerCase().includes(s)) || 
+               (u.phone && u.phone.includes(s)) || 
+               (u.employeeId && String(u.employeeId).toLowerCase().includes(s));
+    };
+
+    const pendingUsers = users.filter(u => u.isApproved === false && u.role !== 'admin' && matchSearch(u));
+    const allApprovedUsers = users.filter(u => u.isApproved !== false);
+    const approvedExcelUsers = allApprovedUsers.filter(u => matchSearch(u));
+    
+    // Thêm các tab theo vai trò
+    const activeUsers = allApprovedUsers.filter(u => u.role === activeTab && matchSearch(u));
 
     const getRoleBadgeClass = (role) => {
         switch (role) {
@@ -276,7 +291,7 @@ function EmployeeManager() {
             </div>
 
             <div className="tabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                <div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button
                         className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`}
                         onClick={() => setActiveTab('pending')}
@@ -284,10 +299,28 @@ function EmployeeManager() {
                         Chờ Duyệt ({users.filter(u => u.isApproved === false && u.role !== 'admin').length})
                     </button>
                     <button
-                        className={`tab-btn ${activeTab === 'approved' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('approved')}
+                        className={`tab-btn ${activeTab === 'driver' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('driver')}
                     >
-                        Nhân Viên ({users.filter(u => u.isApproved !== false).length})
+                        Tài Xế ({users.filter(u => u.isApproved !== false && u.role === 'driver').length})
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'sales' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('sales')}
+                    >
+                        Sales ({users.filter(u => u.isApproved !== false && u.role === 'sales').length})
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'accountant' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('accountant')}
+                    >
+                        Kế Toán ({users.filter(u => u.isApproved !== false && u.role === 'accountant').length})
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('admin')}
+                    >
+                        Quản Trị ({users.filter(u => u.isApproved !== false && u.role === 'admin').length})
                     </button>
                 </div>
                 
@@ -302,7 +335,7 @@ function EmployeeManager() {
                             style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13 }} 
                         />
                     </div>
-                    {activeTab === 'approved' && (
+                    {activeTab !== 'pending' && (
                         <button
                             className="btn-success"
                             onClick={handleExportExcel}
@@ -369,9 +402,9 @@ function EmployeeManager() {
                     </div>
                 )
             ) : (
-                // TAB: ĐÃ DUYỆT
-                approvedUsers.length === 0 ? (
-                    <div className="empty-state"><p>Chưa có nhân viên nào.</p></div>
+                // TAB: ĐÃ DUYỆT (TÀI XẾ / SALES / KẾ TOÁN / ADMIN)
+                activeUsers.length === 0 ? (
+                    <div className="empty-state"><p>Chưa có nhân viên nào trong nhóm này.</p></div>
                 ) : (
                     <table className="data-table">
                         <thead>
@@ -384,7 +417,7 @@ function EmployeeManager() {
                             </tr>
                         </thead>
                         <tbody>
-                            {approvedUsers.map(user => (
+                            {activeUsers.map(user => (
                                 <tr key={user.id}>
                                     <td>
                                         <img

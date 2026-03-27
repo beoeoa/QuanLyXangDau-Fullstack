@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Lấy tất cả xe bồn (fleet)
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Láº¥y táº¥t cáº£ xe bá»“n (fleet)
 export const getAllFleetVehicles = async () => {
     try {
         const res = await fetch(`${API_URL}/fleet-vehicles`);
@@ -11,7 +11,7 @@ export const getAllFleetVehicles = async () => {
     }
 };
 
-// Thêm xe bồn
+// ThÃªm xe bá»“n
 export const addFleetVehicle = async (vehicleData) => {
     try {
         const res = await fetch(`${API_URL}/fleet-vehicles`, {
@@ -26,7 +26,7 @@ export const addFleetVehicle = async (vehicleData) => {
     }
 };
 
-// Cập nhật xe bồn
+// Cáº­p nháº­t xe bá»“n
 export const updateFleetVehicle = async (id, data) => {
     try {
         const res = await fetch(`${API_URL}/fleet-vehicles/${id}`, {
@@ -41,7 +41,7 @@ export const updateFleetVehicle = async (id, data) => {
     }
 };
 
-// Xóa xe bồn
+// XÃ³a xe bá»“n
 export const deleteFleetVehicle = async (id) => {
     try {
         const res = await fetch(`${API_URL}/fleet-vehicles/${id}`, {
@@ -55,3 +55,4 @@ export const deleteFleetVehicle = async (id) => {
 };
 
 export default { getAllFleetVehicles, addFleetVehicle, updateFleetVehicle, deleteFleetVehicle };
+

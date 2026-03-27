@@ -1,5 +1,5 @@
-const API_URL = 'http://localhost:8080/api';
-
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 export const createNotification = async (data) => {
     try {
         const res = await fetch(`${API_URL}/notifications`, {
@@ -49,16 +49,16 @@ export const markAllAsRead = async (userId) => {
     }
 };
 
-// Hàm tiện ích gửi thông báo
+// HÃ m tiá»‡n Ã­ch gá»­i thÃ´ng bÃ¡o
 export const sendAppNotification = async ({ userId, title, message, type = 'system', isRead = false }) => {
     try {
         await createNotification({ userId, title, message, type, isRead, createdAt: new Date().toISOString() });
     } catch (e) {
-        console.error('Lỗi khi gửi thông báo:', e);
+        console.error('Lá»—i khi gá»­i thÃ´ng bÃ¡o:', e);
     }
 };
 
-// Gửi thông báo cho toàn bộ User thuộc 1 Role
+// Gá»­i thÃ´ng bÃ¡o cho toÃ n bá»™ User thuá»™c 1 Role
 export const notifyRole = async (roleName, { title, message, type = 'system' }) => {
     try {
         const res = await fetch(`${API_URL}/users`);
@@ -70,6 +70,7 @@ export const notifyRole = async (roleName, { title, message, type = 'system' }) 
             }
         }
     } catch (e) {
-        console.error(`Lỗi gửi thông báo cho ${roleName}:`, e);
+        console.error(`Lá»—i gá»­i thÃ´ng bÃ¡o cho ${roleName}:`, e);
     }
 };
+

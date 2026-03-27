@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Thêm nhà cung cấp
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// ThÃªm nhÃ  cung cáº¥p
 export const addSupplier = async (data) => {
     try {
         const res = await fetch(`${API_URL}/suppliers`, {
@@ -15,7 +15,7 @@ export const addSupplier = async (data) => {
     }
 };
 
-// Lấy tất cả nhà cung cấp
+// Láº¥y táº¥t cáº£ nhÃ  cung cáº¥p
 export const getAllSuppliers = async () => {
     try {
         const res = await fetch(`${API_URL}/suppliers`);
@@ -26,7 +26,7 @@ export const getAllSuppliers = async () => {
     }
 };
 
-// Cập nhật nhà cung cấp
+// Cáº­p nháº­t nhÃ  cung cáº¥p
 export const updateSupplier = async (id, data) => {
     try {
         const res = await fetch(`${API_URL}/suppliers/${id}`, {
@@ -41,7 +41,7 @@ export const updateSupplier = async (id, data) => {
     }
 };
 
-// Xóa nhà cung cấp
+// XÃ³a nhÃ  cung cáº¥p
 export const deleteSupplier = async (id) => {
     try {
         const res = await fetch(`${API_URL}/suppliers/${id}`, {
@@ -53,3 +53,4 @@ export const deleteSupplier = async (id) => {
         return { success: false, message: error.message };
     }
 };
+

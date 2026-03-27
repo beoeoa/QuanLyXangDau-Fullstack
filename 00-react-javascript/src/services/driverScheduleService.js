@@ -1,12 +1,12 @@
-const API_URL = 'http://localhost:8080/api';
-
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 export const getAllDriverSchedules = async () => {
     try {
         const response = await fetch(`${API_URL}/driver-schedules`);
         if (!response.ok) throw new Error('Network response was not ok');
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi lấy danh sách lịch trình:", error);
+        console.error("Lá»—i khi láº¥y danh sÃ¡ch lá»‹ch trÃ¬nh:", error);
         return [];
     }
 };
@@ -17,7 +17,7 @@ export const getDriverSchedulesByDriver = async (driverId) => {
         if (!response.ok) throw new Error('Network response was not ok');
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi lấy lịch trình của tài xế:", error);
+        console.error("Lá»—i khi láº¥y lá»‹ch trÃ¬nh cá»§a tÃ i xáº¿:", error);
         return [];
     }
 };
@@ -33,7 +33,7 @@ export const createDriverSchedule = async (scheduleData) => {
         });
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi tạo lịch trình:", error);
+        console.error("Lá»—i khi táº¡o lá»‹ch trÃ¬nh:", error);
         return { success: false, message: error.message };
     }
 };
@@ -49,7 +49,7 @@ export const updateDriverSchedule = async (id, scheduleData) => {
         });
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi cập nhật lịch trình:", error);
+        console.error("Lá»—i khi cáº­p nháº­t lá»‹ch trÃ¬nh:", error);
         return { success: false, message: error.message };
     }
 };
@@ -61,7 +61,7 @@ export const deleteDriverSchedule = async (id) => {
         });
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi xóa lịch trình:", error);
+        console.error("Lá»—i khi xÃ³a lá»‹ch trÃ¬nh:", error);
         return { success: false, message: error.message };
     }
 };
@@ -72,7 +72,7 @@ export const getAutomatedDriverTripStats = async (driverId) => {
         if (!response.ok) throw new Error('Network response was not ok');
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi lấy thống kê chuyến đi tự động:", error);
+        console.error("Lá»—i khi láº¥y thá»‘ng kÃª chuyáº¿n Ä‘i tá»± Ä‘á»™ng:", error);
         return [];
     }
 };
@@ -83,7 +83,8 @@ export const getAllAutomatedDriverTripStats = async () => {
         if (!response.ok) throw new Error('Network response was not ok');
         return await response.json();
     } catch (error) {
-        console.error("Lỗi khi lấy tất cả thống kê chuyến đi tự động:", error);
+        console.error("Lá»—i khi láº¥y táº¥t cáº£ thá»‘ng kÃª chuyáº¿n Ä‘i tá»± Ä‘á»™ng:", error);
         return [];
     }
 };
+

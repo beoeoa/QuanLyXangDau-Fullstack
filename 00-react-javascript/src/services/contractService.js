@@ -1,5 +1,5 @@
-const API_URL = 'http://localhost:8080/api';
-
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 export const getAllContracts = async () => {
     try {
         const res = await fetch(`${API_URL}/contracts`);
@@ -44,3 +44,4 @@ export const deleteContract = async (id) => {
         return { success: false, message: error.message };
     }
 };
+

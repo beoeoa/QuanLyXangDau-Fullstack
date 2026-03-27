@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Tạo phiếu nhập/xuất
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Táº¡o phiáº¿u nháº­p/xuáº¥t
 export const createTransaction = async (transactionData) => {
     try {
         const res = await fetch(`${API_URL}/transactions`, {
@@ -15,7 +15,7 @@ export const createTransaction = async (transactionData) => {
     }
 };
 
-// Lấy tất cả giao dịch
+// Láº¥y táº¥t cáº£ giao dá»‹ch
 export const getAllTransactions = async () => {
     try {
         const res = await fetch(`${API_URL}/transactions`);
@@ -26,7 +26,7 @@ export const getAllTransactions = async () => {
     }
 };
 
-// Lấy giao dịch theo loại
+// Láº¥y giao dá»‹ch theo loáº¡i
 export const getTransactionsByType = async (type) => {
     try {
         const res = await fetch(`${API_URL}/transactions?type=${type}`);
@@ -37,7 +37,7 @@ export const getTransactionsByType = async (type) => {
     }
 };
 
-// Xóa giao dịch
+// XÃ³a giao dá»‹ch
 export const deleteTransaction = async (id) => {
     try {
         const res = await fetch(`${API_URL}/transactions/${id}`, {
@@ -49,3 +49,4 @@ export const deleteTransaction = async (id) => {
         return { success: false, message: error.message };
     }
 };
+

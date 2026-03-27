@@ -1,9 +1,11 @@
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8080/api/routes';
+
 
 /**
- * Lưu lộ trình mới
+ * LÆ°u lá»™ trÃ¬nh má»›i
  */
 export const saveRoute = async (routeData) => {
     try {
@@ -15,33 +17,33 @@ export const saveRoute = async (routeData) => {
 };
 
 /**
- * Lấy lộ trình theo ID
+ * Láº¥y lá»™ trÃ¬nh theo ID
  */
 export const getRouteById = async (id) => {
     try {
         const res = await axios.get(`${API_URL}/${id}`);
         return res.data;
     } catch (e) {
-        console.error('Lỗi khi lấy lộ trình:', e);
+        console.error('Lá»—i khi láº¥y lá»™ trÃ¬nh:', e);
         return null;
     }
 };
 
 /**
- * Lấy danh sách lộ trình của người dùng
+ * Láº¥y danh sÃ¡ch lá»™ trÃ¬nh cá»§a ngÆ°á»i dÃ¹ng
  */
 export const getUserRoutes = async (userId) => {
     try {
         const res = await axios.get(`${API_URL}/user/${userId}`);
         return res.data;
     } catch (e) {
-        console.error('Lỗi khi lấy danh sách lộ trình:', e);
+        console.error('Lá»—i khi láº¥y danh sÃ¡ch lá»™ trÃ¬nh:', e);
         return [];
     }
 };
 
 /**
- * Xóa lộ trình
+ * XÃ³a lá»™ trÃ¬nh
  */
 export const deleteRoute = async (id) => {
     try {
@@ -51,3 +53,4 @@ export const deleteRoute = async (id) => {
         return { success: false, message: e.response?.data?.message || e.message };
     }
 };
+

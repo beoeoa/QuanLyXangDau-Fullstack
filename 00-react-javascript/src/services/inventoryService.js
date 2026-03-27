@@ -1,6 +1,6 @@
-const API_URL = 'http://localhost:8080/api';
-
-// Lấy tất cả sản phẩm
+﻿import API_BASE from './apiConfig';
+const API_URL = API_BASE;
+// Láº¥y táº¥t cáº£ sáº£n pháº©m
 export const getAllProducts = async () => {
     try {
         const res = await fetch(`${API_URL}/inventory`);
@@ -11,7 +11,7 @@ export const getAllProducts = async () => {
     }
 };
 
-// Thêm sản phẩm mới
+// ThÃªm sáº£n pháº©m má»›i
 export const addProduct = async (productData) => {
     try {
         const res = await fetch(`${API_URL}/inventory`, {
@@ -26,7 +26,7 @@ export const addProduct = async (productData) => {
     }
 };
 
-// Lấy sản phẩm theo ID
+// Láº¥y sáº£n pháº©m theo ID
 export const getProductById = async (id) => {
     try {
         const products = await getAllProducts();
@@ -37,7 +37,7 @@ export const getProductById = async (id) => {
     }
 };
 
-// Cập nhật sản phẩm
+// Cáº­p nháº­t sáº£n pháº©m
 export const updateProduct = async (id, data) => {
     try {
         const res = await fetch(`${API_URL}/inventory/${id}`, {
@@ -52,7 +52,7 @@ export const updateProduct = async (id, data) => {
     }
 };
 
-// Xóa sản phẩm
+// XÃ³a sáº£n pháº©m
 export const deleteProduct = async (id) => {
     try {
         const res = await fetch(`${API_URL}/inventory/${id}`, {
@@ -65,10 +65,11 @@ export const deleteProduct = async (id) => {
     }
 };
 
-// Cập nhật tồn kho (gọi gián tiếp qua transaction)
+// Cáº­p nháº­t tá»“n kho (gá»i giÃ¡n tiáº¿p qua transaction)
 export const updateStock = async (id, quantityChange) => {
-    // Hàm này giờ được xử lý bởi backend khi tạo transaction
-    // Giữ lại để không phải sửa code component
-    console.warn('updateStock nên được gọi qua createTransaction thay vì trực tiếp');
+    // HÃ m nÃ y giá» Ä‘Æ°á»£c xá»­ lÃ½ bá»Ÿi backend khi táº¡o transaction
+    // Giá»¯ láº¡i Ä‘á»ƒ khÃ´ng pháº£i sá»­a code component
+    console.warn('updateStock nÃªn Ä‘Æ°á»£c gá»i qua createTransaction thay vÃ¬ trá»±c tiáº¿p');
     return { success: true };
 };
+

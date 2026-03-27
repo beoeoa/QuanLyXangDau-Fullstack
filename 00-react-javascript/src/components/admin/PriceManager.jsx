@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { getAllPrices, addPrice, updatePrice, deletePrice } from '../../services/priceService'
 import './AdminModules.css'
 
-const API_URL = 'http://localhost:8080/api'
+import API_BASE from '../../services/apiConfig'
+
+const API_URL = API_BASE
 
 const PRODUCTS = [
     'Xăng RON 95-III', 'Xăng RON 95-V', 'Xăng E5 RON 92',
@@ -12,6 +14,7 @@ const PRODUCTS = [
 function PriceManager({ isReadOnly = false }) {
     const [prices, setPrices] = useState([])
     const [loading, setLoading] = useState(true)
+    const [selectedDateFilter, setSelectedDateFilter] = useState('') // '' means latest, 'ALL' means full history
     const [showForm, setShowForm] = useState(false)
     const [editing, setEditing] = useState(null)
     const [form, setForm] = useState({ product: '', retailPrice: '', wholesalePrice: '', discount: '', effectiveDate: '' })
@@ -95,31 +98,50 @@ function PriceManager({ isReadOnly = false }) {
 
     const getLatestPrices = (priceList) => {
         const productMap = {};
-        // Sắp xếp giảm dần theo thời gian hiệu lực
-        const sorted = [...priceList].sort((a, b) => {
-            return new Date(b.effectiveDate || 0) - new Date(a.effectiveDate || 0);
-        });
-        
-        // Chỉ lấy bản ghi mới nhất cho mỗi loại sản phẩm
-        sorted.forEach(p => {
-            if (!productMap[p.product]) {
-                productMap[p.product] = p;
-            }
-        });
-        
+        const sorted = [...priceList].sort((a, b) => new Date(b.effectiveDate || 0) - new Date(a.effectiveDate || 0));
+        sorted.forEach(p => { if (!productMap[p.product]) productMap[p.product] = p; });
         return Object.values(productMap);
     };
 
-    // Chia giá thành 2 nhóm: Nhà nước (isGovPrice) vs Nội bộ
-    const govPrices = getLatestPrices(prices.filter(p => p.isGovPrice));
+    const getSortedPrices = (priceList) => {
+        // Lịch sử giá: Sắp xếp giảm dần theo thời gian hiệu lực (Mới nhất lên đầu)
+        return [...priceList].sort((a, b) => {
+            const dateDiff = new Date(b.effectiveDate || 0) - new Date(a.effectiveDate || 0);
+            if (dateDiff !== 0) return dateDiff;
+            return (a.product || '').localeCompare(b.product || '');
+        });
+    };
+
+    const availableDates = [...new Set(prices.filter(p => p.isGovPrice).map(p => p.effectiveDate))].filter(Boolean).sort((a, b) => new Date(b) - new Date(a));
+    const activeDate = selectedDateFilter === 'ALL' ? null : (selectedDateFilter || (availableDates.length > 0 ? availableDates[0] : null));
+    const displayPrices = activeDate ? prices.filter(p => p.effectiveDate === activeDate) : prices;
+
+    // Giá Nhà Nước (Bị ảnh hưởng bởi bộ lọc ngày ở trên)
+    const govPrices = getSortedPrices(displayPrices.filter(p => p.isGovPrice));
+    
+    // Giá Nội Bộ (Nguyên vẹn như cũ: Chỉ lấy 1 giá hiệu lực mới nhất cho mỗi sản phẩm)
     const customPrices = getLatestPrices(prices.filter(p => !p.isGovPrice));
 
     if (loading) return <div className="loading-state">Đang tải bảng giá...</div>
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                <h2>💰 Bảng Giá Xăng Dầu</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    <h2 style={{ margin: 0 }}>💰 Bảng Giá Xăng Dầu</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', padding: '6px 12px', borderRadius: 6, border: '1px solid #ccc' }}>
+                        <span>📅 Ngày áp dụng:</span>
+                        <select 
+                            value={selectedDateFilter} 
+                            onChange={e => setSelectedDateFilter(e.target.value)}
+                            style={{ border: 'none', outline: 'none', background: 'transparent', fontWeight: 'bold', fontSize: 14, cursor: 'pointer' }}
+                        >
+                            {!selectedDateFilter && availableDates.length > 0 && <option value="">Mới nhất ({availableDates[0]})</option>}
+                            {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
+                            <option value="ALL">-- Hiển thị tất cả lịch sử --</option>
+                        </select>
+                    </div>
+                </div>
                 {!isReadOnly && (
                     <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={handleSync} disabled={syncing}
