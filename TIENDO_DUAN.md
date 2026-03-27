@@ -39,3 +39,4 @@
 - [2026-03-26] Trà My <myy8037@gmail.com> hoàn thành: Hoàn thiện Validate form nhập liệu bán hàng
 - [2026-03-26] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Hoàn thiện phân quyền: Kế toán không được xóa chứng từ đã duyệt
 - [2026-03-27] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Fix bug App: Bắt lỗi 'Unexpected end of JSON input' khi đăng nhập sai
+- [2026-03-27] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Ẩn mã bảo mật Mapbox Key vào file .env
