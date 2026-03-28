@@ -71,11 +71,12 @@ const createOrGetUserDoc = async (req, res) => {
             return res.status(404).json({ error: 'Không thể tạo hoặc lấy dữ liệu người dùng' });
         }
 
-        console.log(`[API] Returning result focus: ${result.fullname || 'No Name'}`);
-        res.json(result);
+        console.log(`[API] Returning result focus: ${result.fullname || 'No Name'}, isNew: ${result.isNewUser}`);
+        // Ensure result is a plain object and not undefined
+        return res.status(200).json(result || { success: false, message: 'No data returned' });
     } catch (e) {
         console.error(`[API] get-or-create FATAL:`, e.message);
-        res.status(500).json({ error: e.message });
+        return res.status(500).json({ error: e.message });
     }
 };
 
