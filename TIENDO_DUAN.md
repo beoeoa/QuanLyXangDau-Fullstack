@@ -41,3 +41,4 @@
 - [2026-03-27] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Fix bug App: Bắt lỗi 'Unexpected end of JSON input' khi đăng nhập sai
 - [2026-03-27] Đoàn Đắc Phúc <beoeoa@gmail.com> hoàn thành: Ẩn mã bảo mật Mapbox Key vào file .env
 - [2026-03-28] Trà My <myy8037@gmail.com> hoàn thành: Cập nhật tài liệu HDSD chức năng Bán hàng & Kho
+- [2026-03-28] Hoàng Thế An <diethem1996@gmail.com> hoàn thành: Cập nhật tài liệu HDSD chức năng Kế toán
