@@ -32,35 +32,33 @@ const getOrCreateUserDoc = async (user, additionalData = {}) => {
       photoURL: user.photoURL || null,
       ...additionalData
     })
-  })
+  });
 
-  // Handle errors (res.ok is false: 4xx, 5xx)
+  const textBody = await res.text().catch(() => "");
+
+  // Xử lý khi Backend báo lỗi (4xx, 5xx)
   if (!res.ok) {
     let errData = { error: 'Unknown server error' };
-    try {
-      const text = await res.text();
-      if (text) {
-        try { errData = JSON.parse(text); } catch (e) { errData.error = text; }
-      }
-    } catch (e) {
-      console.warn('[Backend] Error details parse failed');
+    if (textBody) {
+      try { errData = JSON.parse(textBody); } catch (e) { errData.error = textBody; }
     }
     const errMsg = errData.message || errData.error || `Lỗi từ Backend (${res.status})`;
     throw new Error(errMsg);
   }
 
-  // Handle empty body (Status 200 but Content-Length: 0)
-  const textBody = await res.text();
-  if (!textBody) {
+  // Xử lý khi phản hồi rỗng (Status 200 nhưng không có body)
+  if (!textBody || textBody.trim() === "") {
     console.warn('[Backend] Received empty response body for get-or-create');
-    return { uid: user.uid, email: user.email, role: 'pending', isApproved: false };
+    // Fallback: Nếu là Admin đăng nhập thì cũng cần lấy role từ Backend, 
+    // Trả về dữ liệu tối thiểu và cảnh báo lỗi.
+    throw new Error("Máy chủ trả về dữ liệu trống. Vui lòng thử lại.");
   }
 
   try {
     return JSON.parse(textBody);
   } catch (e) {
     console.error('[Backend] JSON Parse Error:', e.message, textBody);
-    throw new Error('Dữ liệu từ máy chủ không hợp lệ (JSON Parse Error).');
+    throw new Error('Dữ liệu từ máy chủ không đúng định dạng JSON.');
   }
 }
 
@@ -99,7 +97,7 @@ export const registerWithEmail = async (email, password, userData) => {
       return {
         success: true,
         userId: user.uid,
-        message: '⚠️ Đăng ký Auth OK nhưng LỖI lưu dữ liệu: ' + firestoreErr.message
+        message: '⚠️ Đăng ký Auth OK nhưng LỖI API: ' + firestoreErr.message
       }
     }
 
@@ -140,23 +138,11 @@ export const loginWithEmail = async (email, password) => {
   } catch (error) {
     console.error('❌ Login error:', error.code, error.message, error)
 
-    // Nếu lỗi do mất API backend (TypeError: Failed to fetch)
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      return { success: false, message: 'Không thể kết nối với Backend Server (Failed to fetch). Hãy kiểm tra Server Node.js đã chạy trên port 8888 chưa.' }
+      return { success: false, message: 'Không thể kết nối với Backend Server (Failed to fetch).' }
     }
 
-    // Nếu lỗi kết nối API Database báo về
-    if (!error.code) {
-      return { success: false, message: `Lỗi Backend API: ${error.message}` }
-    }
-
-    let message = 'Email hoặc mật khẩu không chính xác'
-    if (error.code === 'auth/user-not-found') message = 'Email không tồn tại'
-    else if (error.code === 'auth/wrong-password') message = 'Mật khẩu không chính xác'
-    else if (error.code === 'auth/invalid-email') message = 'Email không hợp lệ'
-    else if (error.code === 'auth/invalid-credential') message = 'Thông tin đăng nhập không chính xác'
-
-    return { success: false, message }
+    return { success: false, message: error.message }
   }
 }
 
@@ -223,13 +209,10 @@ export const logout = async () => {
 export const resetPassword = async (email) => {
   try {
     await sendPasswordResetEmail(auth, email)
-    return { success: true, message: 'Đường dẫn đặt lại mật khẩu đã được gửi! Vui lòng kiểm tra hộp thư đến (và mục Spam) của email: ' + email }
+    return { success: true, message: 'Đường dẫn đặt lại mật khẩu đã được gửi!' }
   } catch (error) {
     console.error('Reset password error:', error)
-    let message = 'Lỗi hệ thống khi gửi email đặt lại mật khẩu.'
-    if (error.code === 'auth/user-not-found') message = 'Email không tồn tại trong hệ thống. Vui lòng kiểm tra lại.'
-    else if (error.code === 'auth/invalid-email') message = 'Định dạng email không hợp lệ.'
-    return { success: false, message }
+    return { success: false, message: 'Lỗi khi gửi email đặt lại mật khẩu.' }
   }
 }
 

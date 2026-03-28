@@ -2,18 +2,18 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from 'firebase/auth'
 
 // ============================================================
-// FIREBASE CONFIG - Chỉ giữ Auth cho Frontend
-// Mọi thao tác Firestore đã được chuyển sang Backend API
+// FIREBASE CONFIG - Sử dụng biến môi trường (Environment Variables)
+// Bảo mật API Key và đồng bộ với cấu hình .env
 // ============================================================
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBKpmlQ8f4VkkyzGftw7a0Qy_z11fkXe-8",
-  authDomain: "quanlyxangdau-3fa49.firebaseapp.com",
-  projectId: "quanlyxangdau-3fa49",
-  storageBucket: "quanlyxangdau-3fa49.firebasestorage.app",
-  messagingSenderId: "255173081788",
-  appId: "1:255173081788:web:70cd57d9ed5b4ff38a2eb9",
-  measurementId: "G-DZFEET01S9"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Khởi tạo Firebase
