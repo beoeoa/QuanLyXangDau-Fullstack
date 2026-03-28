@@ -15,6 +15,7 @@ interface MarkerInfo {
   emoji: string; color: string;
   id: string;
   status: string;
+  hasGps: boolean;
 }
 
 export default function AdminLiveMap() {
@@ -39,25 +40,35 @@ export default function AdminLiveMap() {
           const dest = order.items && Array.isArray(order.items) && order.items.length > 0
             ? [...new Set(order.items.map((it: any) => it.destination).filter(Boolean))].join(', ')
             : (order.destination || '');
+          const lastUpdate = toDateSafe(order.updatedAt || order.createdAt);
+          const now = new Date();
+          const isStale = lastUpdate && (now.getTime() - lastUpdate.getTime() > 300000); // 5 mins
           const hasGps = Boolean(order?.currentLocation?.lat && order?.currentLocation?.lng);
+          
           if (!hasGps) {
             missing += 1;
-            continue;
           }
-          const coords = { lat: order.currentLocation.lat, lng: order.currentLocation.lng };
+
+          const coords = hasGps || (order?.currentLocation?.lat && order?.currentLocation?.lng) 
+            ? { lat: order.currentLocation.lat, lng: order.currentLocation.lng } 
+            : { lat: 0, lng: 0 };
 
           const statusMap: Record<string, string> = { moving: 'Đang chạy', received: 'Đã nhận', unloading: 'Đang xả', arrived: 'Đã đến', pending: 'Chờ nhận' };
           const emojiMap: Record<string, string> = { moving: '🚛', unloading: '⛽', arrived: '📍', received: '✅', pending: '📋' };
           const colorMap: Record<string, string> = { moving: '#f39c12', unloading: '#e67e22', arrived: '#9b59b6', received: '#3498db', pending: '#95a5a6' };
+          
+          const timeStr = lastUpdate ? lastUpdate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+
           results.push({
             id: order.id || `${order.vehiclePlate || ''}-${order.assignedDriverId || ''}`,
-            lat: coords.lat, lng: coords.lng,
+            lat: coords.lat, lng: coords.lng, 
+            hasGps: hasGps && !isStale,
             plate: (order.vehiclePlate || 'N/A').replace(/'/g, ''),
             driver: (order.assignedDriverName || 'Chưa gán').replace(/'/g, ''),
-            statusLabel: statusMap[order.status] || 'N/A',
+            statusLabel: !hasGps ? 'Mất GPS' : (isStale ? `Mất sóng (${timeStr})` : (statusMap[order.status] || 'N/A')),
             dest: dest.replace(/'/g, '').replace(/"/g, ''),
-            emoji: emojiMap[order.status] || '📋',
-            color: colorMap[order.status] || '#95a5a6',
+            emoji: isStale || !hasGps ? '⚠️' : (emojiMap[order.status] || '📋'),
+            color: !hasGps ? '#e74c3c' : (isStale ? '#f1c40f' : (colorMap[order.status] || '#95a5a6')),
             status: order.status || 'pending',
           });
         }
@@ -68,8 +79,17 @@ export default function AdminLiveMap() {
       } catch (e) { console.error('Map error:', e); }
       if (alive) setLoading(false);
     };
+
+    // Helper to parse dates safely
+    const toDateSafe = (v: any): Date | null => {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      if (v?._seconds) return new Date(v._seconds * 1000);
+      return new Date(v);
+    };
+
     load();
-    const t = setInterval(load, 10000); // refresh 10s
+    const t = setInterval(load, 15000); // refresh 15s
     return () => { alive = false; clearInterval(t); };
   }, []);
 
@@ -78,8 +98,8 @@ export default function AdminLiveMap() {
   const cLng = markers.length > 0 ? markers.reduce((s, m) => s + m.lng, 0) / markers.length : 106.6297;
   const zoom = markers.length === 1 ? 14 : markers.length > 1 ? 11 : 9;
 
-  // Lắp Marker bằng JSX sang JS string
-  const markersJS = markers.map(m => `
+  // Render markers (DO NOT filter out missing GPS if they have lat/lng)
+  const markersJS = markers.filter(m => m.lat !== 0).map(m => `
     (function(){
       var marker = L.marker([${m.lat}, ${m.lng}], {
       icon: L.divIcon({ className: 'custom-pin', html: '<div style="font-size:32px; filter:drop-shadow(0px 4px 6px rgba(0,0,0,0.3))">${m.emoji}</div>', iconSize: [40, 40], iconAnchor: [20, 36] })
@@ -89,6 +109,7 @@ export default function AdminLiveMap() {
       window._markers['${m.id}'] = marker;
     })();
   `).join('\n');
+
 
   // Bản đồ Raster của Google Maps (Giao thông bản địa - Chi tiết + Nhẹ + Ngon nhất trên Mobile WebView)
   // Không dùng Vector WebGL (TrackAsia/MapboxGL) vì Expo Go trên Android thường xuyên bị lỗi trắng GPU Render
@@ -126,7 +147,7 @@ export default function AdminLiveMap() {
 
     ${markersJS}
     
-    ${markers.length > 1 ? `map.fitBounds([${markers.map(m => `[${m.lat},${m.lng}]`).join(',')}], {padding: [50, 50], maxZoom: 14});` : ''}
+    ${markers.filter(m => m.hasGps).length > 1 ? `map.fitBounds([${markers.filter(m => m.hasGps).map(m => `[${m.lat},${m.lng}]`).join(',')}], {padding: [50, 50], maxZoom: 14});` : ''}
 
     window.focusMarker = function(id){
       try{
@@ -205,6 +226,7 @@ export default function AdminLiveMap() {
               <Text style={styles.fleetPlate}>{m.emoji} {m.plate}</Text>
               <Text style={[styles.fleetStatus, { color: m.color }]}>{m.statusLabel}</Text>
               <Text style={styles.fleetDriver} numberOfLines={1}>👤 {m.driver}</Text>
+              {!m.hasGps && <Text style={{fontSize: 10, color: '#e74c3c', marginTop: 4, fontWeight: 'bold'}}>Không thể Map</Text>}
             </TouchableOpacity>
           ))}
         </ScrollView>

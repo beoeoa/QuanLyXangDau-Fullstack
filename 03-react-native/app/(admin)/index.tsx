@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useAuthStore } from '../../store/authStore';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState, useCallback, useMemo } from 'react';
-import { fetchAllDriverExpenses, fetchDeliveryLogs, fetchOrders, fetchTransactions } from '../../services/dataService';
+import { fetchAllDriverExpenses, fetchDeliveryLogs, fetchOrders, fetchTransactions, fetchFleetVehicles, fetchUsers } from '../../services/dataService';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 export default function AdminDashboardScreen() {
@@ -14,6 +14,8 @@ export default function AdminDashboardScreen() {
   const [saleOrders, setSaleOrders] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [showProfile, setShowProfile] = useState(false);
 
   const loadData = async () => {
@@ -24,15 +26,19 @@ export default function AdminDashboardScreen() {
       setOrders(dels || []);
       setLoading(false);
 
-      // Tài chính tải nền (không block UI)
-      const [ords, exps, trans] = await Promise.all([
+      // Tài chính + Nhân sự + Xe tải nền (không block UI)
+      const [ords, exps, trans, vhcs, usrs] = await Promise.all([
         fetchOrders(),
         fetchAllDriverExpenses(),
         fetchTransactions(),
+        fetchFleetVehicles(),
+        fetchUsers(),
       ]);
       setSaleOrders(ords || []);
       setExpenses(exps || []);
       setTransactions(trans || []);
+      setVehicles(vhcs || []);
+      setAllUsers(usrs || []);
     } catch (e) { console.error(e); }
     // nếu lỗi, vẫn tắt loading để UI không treo
     setLoading(false);
@@ -45,6 +51,26 @@ export default function AdminDashboardScreen() {
   const completedCount = orders.filter(o => o.status === 'completed').length;
   const issueCount = orders.filter(o => o.status === 'cancelled').length;
   const totalVolume = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+  // Nhân sự
+  const approvedUsers = allUsers.filter((u: any) => u.isApproved !== false);
+  const driverCount = approvedUsers.filter((u: any) => u.role === 'driver').length;
+  const salesCount = approvedUsers.filter((u: any) => u.role === 'sales').length;
+  const accountantCount = approvedUsers.filter((u: any) => u.role === 'accountant').length;
+
+  // Đội xe
+  const totalVehicles = vehicles.length;
+  const activeVehiclePlates = new Set(orders.filter(o => activeStatuses.includes(o.status)).map(o => o.vehiclePlate));
+  const activeVehicleCount = activeVehiclePlates.size;
+
+  // 5 đơn gần nhất
+  const recentOrders = [...orders]
+    .sort((a, b) => {
+      const da = new Date(a.updatedAt?._seconds ? a.updatedAt._seconds * 1000 : (a.updatedAt || a.createdAt || 0)).getTime();
+      const db = new Date(b.updatedAt?._seconds ? b.updatedAt._seconds * 1000 : (b.updatedAt || b.createdAt || 0)).getTime();
+      return db - da;
+    })
+    .slice(0, 5);
 
   const toDateSafe = (v: any): Date | null => {
     if (!v) return null;
@@ -120,7 +146,53 @@ export default function AdminDashboardScreen() {
     return { rev: revenue, exp: totalCost, prof: revenue - totalCost };
   }, [orders, saleOrders, expenses, transactions, period]);
 
+  const monthlyHistory = useMemo(() => {
+    const now = new Date();
+    const history = [];
+    for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const month = d.getMonth();
+        const year = d.getFullYear();
+        
+        const filteredTrips = (orders || []).filter(o => {
+            const dt = toDateSafe(o.updatedAt || o.createdAt);
+            return dt && dt.getMonth() === month && dt.getFullYear() === year && o.status === 'completed';
+        });
+
+        let revenue = 0;
+        let cogs = 0;
+        filteredTrips.forEach(o => {
+            const qty = Number(o.amount) || 0;
+            const p = getPricing(o.orderId, o.product, saleOrders || []);
+            revenue += qty * (p.totalUnit || 0);
+            cogs += qty * (p.cost || 0);
+        });
+
+        const monthExpenses = (expenses || []).filter(e => {
+            const dt = toDateSafe(e.date || e.createdAt);
+            return dt && dt.getMonth() === month && dt.getFullYear() === year && e.status === 'approved';
+        });
+        const expAmt = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+        const txExp = (transactions || []).filter(t => {
+            const dt = toDateSafe(t.createdAt);
+            return dt && dt.getMonth() === month && dt.getFullYear() === year && t.type === 'expense';
+        });
+        const txAmt = txExp.reduce((s, t) => s + (Number(t.totalAmount) || Number(t.amount) || 0), 0);
+
+        const totalExp = cogs + expAmt + txAmt;
+        history.push({
+            label: `Tháng ${month + 1}/${year}`,
+            rev: revenue,
+            exp: totalExp,
+            prof: revenue - totalExp
+        });
+    }
+    return history;
+  }, [orders, saleOrders, expenses, transactions]);
+
   const formatVND = (num: number) => {
+
     if (num >= 1000000000) return (num / 1000000000).toFixed(1) + ' Tỷ';
     if (num >= 1000000) return (num / 1000000).toFixed(1) + ' Tr';
     if (num === 0) return '0đ';
@@ -208,7 +280,7 @@ export default function AdminDashboardScreen() {
             <Ionicons name="person-circle" size={40} color="#fff" />
           </TouchableOpacity>
         </View>
-
+ 
         <View style={styles.financeCard}>
           <View style={styles.filterTabs}>
             {(['day', 'month', 'year'] as const).map(p => (
@@ -238,6 +310,31 @@ export default function AdminDashboardScreen() {
       </View>
 
       <View style={styles.bodySection}>
+        {/* ===== BÁO CÁO THÁNG ===== */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Lịch sử Tài chính (6 Tháng)</Text>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+          {monthlyHistory.map((m, idx) => (
+            <View key={idx} style={styles.monthCard}>
+              <Text style={styles.monthLabel}>{m.label}</Text>
+              <View style={styles.monthStats}>
+                <View style={styles.monthRow}>
+                  <Text style={styles.mValue}>{formatVND(m.rev)}</Text>
+                  <Text style={styles.mLabel}>Thu</Text>
+                </View>
+                <View style={styles.monthRow}>
+                  <Text style={[styles.mValue, { color: '#ff4d4f' }]}>{formatVND(m.exp)}</Text>
+                  <Text style={styles.mLabel}>Chi</Text>
+                </View>
+              </View>
+              <View style={[styles.profitBadge, { backgroundColor: m.prof >= 0 ? '#52c41a' : '#ff4d4f' }]}>
+                <Text style={styles.profitBadgeText}>{m.prof >= 0 ? '+' : ''}{formatVND(m.prof)}</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tình trạng phân phối (Logistics)</Text>
           <TouchableOpacity onPress={loadData}><Text style={styles.linkText}>⟳ Làm mới</Text></TouchableOpacity>
@@ -263,6 +360,70 @@ export default function AdminDashboardScreen() {
         <View style={styles.totalBanner}>
           <Text style={styles.totalBannerText}>📊 Tổng số lệnh: <Text style={{fontWeight:'900'}}>{orders.length}</Text></Text>
         </View>
+
+        {/* ===== NHÂN SỰ ===== */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Nhân sự hệ thống</Text>
+          <Text style={{color:'#64748b', fontSize: 12, fontWeight:'600'}}>{approvedUsers.length} người</Text>
+        </View>
+        <View style={styles.tripStatsGrid}>
+          <View style={[styles.tripCard, { borderLeftColor: '#1890ff', borderLeftWidth: 4 }]}>
+            <FontAwesome5 name="truck" size={22} color="#1890ff" />
+            <Text style={styles.tripCount}>{driverCount}</Text><Text style={styles.tripLabel}>Tài Xế</Text>
+          </View>
+          <View style={[styles.tripCard, { borderLeftColor: '#52c41a', borderLeftWidth: 4 }]}>
+            <Ionicons name="briefcase" size={24} color="#52c41a" />
+            <Text style={styles.tripCount}>{salesCount}</Text><Text style={styles.tripLabel}>Kinh Doanh</Text>
+          </View>
+          <View style={[styles.tripCard, { borderLeftColor: '#faad14', borderLeftWidth: 4 }]}>
+            <Ionicons name="calculator" size={24} color="#faad14" />
+            <Text style={styles.tripCount}>{accountantCount}</Text><Text style={styles.tripLabel}>Kế Toán</Text>
+          </View>
+          <View style={[styles.tripCard, { borderLeftColor: '#722ed1', borderLeftWidth: 4 }]}>
+            <MaterialCommunityIcons name="truck-trailer" size={26} color="#722ed1" />
+            <Text style={styles.tripCount}>{activeVehicleCount}/{totalVehicles}</Text><Text style={styles.tripLabel}>Xe Hoạt Động</Text>
+          </View>
+        </View>
+
+        {/* ===== ĐƠN HÀNG GẦN ĐÂY ===== */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Đơn hàng gần đây</Text>
+        </View>
+        {recentOrders.length === 0 ? (
+          <View style={styles.totalBanner}><Text style={styles.totalBannerText}>Chưa có đơn hàng nào.</Text></View>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {recentOrders.map((o, idx) => {
+              const statusMap: Record<string, {label: string, color: string, bg: string}> = {
+                pending: { label: 'Chờ nhận', color: '#95a5a6', bg: '#f0f0f0' },
+                received: { label: 'Đã nhận', color: '#3498db', bg: '#e3f2fd' },
+                moving: { label: 'Đang chạy', color: '#f39c12', bg: '#fff8e1' },
+                arrived: { label: 'Đã đến', color: '#9b59b6', bg: '#f3e5f5' },
+                unloading: { label: 'Đang xả', color: '#e67e22', bg: '#fff3e0' },
+                completed: { label: 'Hoàn thành', color: '#27ae60', bg: '#e8f5e9' },
+                cancelled: { label: 'Hủy', color: '#e74c3c', bg: '#ffebee' },
+              };
+              const st = statusMap[o.status] || statusMap.pending;
+              const dt = new Date(o.updatedAt?._seconds ? o.updatedAt._seconds * 1000 : (o.updatedAt || o.createdAt || 0));
+              const dateStr = !isNaN(dt.getTime()) ? dt.toLocaleDateString('vi-VN') : '';
+              return (
+                <View key={o.id || idx} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: {width:0,height:2}, shadowOpacity: 0.04, elevation: 1 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: st.bg, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                    <FontAwesome5 name="gas-pump" size={18} color={st.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '800', color: '#111', fontSize: 14 }} numberOfLines={1}>{o.vehiclePlate || 'N/A'} • {o.product || 'Xăng'}</Text>
+                    <Text style={{ color: '#888', fontSize: 12, marginTop: 2 }} numberOfLines={1}>👤 {o.assignedDriverName || 'Chưa gán'} • {Number(o.amount || 0).toLocaleString()}L • {dateStr}</Text>
+                  </View>
+                  <View style={{ backgroundColor: st.bg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 }}>
+                    <Text style={{ color: st.color, fontWeight: '800', fontSize: 11 }}>{st.label}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         <View style={styles.mapBannerContainer}>
            <View style={styles.mapBannerContent}>
               <Text style={styles.mapBannerTitle}>Bản Đồ Vệ Tinh Trực Tuyến</Text>
@@ -332,4 +493,13 @@ const styles = StyleSheet.create({
   logoutBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   closeBtnProfile: { paddingVertical: 10 },
   closeBtnText: { color: '#999', fontSize: 14, fontWeight: '600' },
+ 
+  monthCard: { backgroundColor: '#fff', width: 140, padding: 12, borderRadius: 16, marginRight: 12, borderBottomWidth: 3, borderBottomColor: '#0070f3', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, elevation: 1 },
+  monthLabel: { fontSize: 13, fontWeight: '700', color: '#64748b', marginBottom: 8 },
+  monthStats: { gap: 4, marginBottom: 8 },
+  monthRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  mValue: { fontSize: 13, fontWeight: '800', color: '#27ae60' },
+  mLabel: { fontSize: 10, color: '#94a3b8', fontWeight: 'bold' },
+  profitBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
+  profitBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
 });
