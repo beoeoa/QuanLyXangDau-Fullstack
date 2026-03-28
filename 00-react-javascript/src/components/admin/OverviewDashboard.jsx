@@ -135,7 +135,6 @@ function OverviewDashboard() {
         const cost = driverExpenseCost + transactionCost + costOfGoods + totalHaoHut;
         const netProfit = revenue - cost;
 
-        const approvedUsers = users.filter(u => u.isApproved !== false)
         const driverCount = approvedUsers.filter(u => u.role === 'driver').length
         const salesCount = approvedUsers.filter(u => u.role === 'sales').length
         const accountantCount = approvedUsers.filter(u => u.role === 'accountant').length
