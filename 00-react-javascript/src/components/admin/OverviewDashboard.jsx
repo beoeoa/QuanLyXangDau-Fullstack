@@ -104,6 +104,26 @@ function OverviewDashboard() {
             costOfGoods += qty * p.cost;
         })
 
+        const approvedUsers = users.filter(u => u.isApproved !== false)
+        const totalBaseSalary = approvedUsers.filter(u => u.role === 'driver').reduce((sum, d) => sum + Number(d.baseSalary || 0), 0);
+        let totalFuelBonus = 0;
+        let totalHaoHut = 0;
+
+        completedOrders.forEach(o => {
+            let fuelBonus = 0;
+            const loss = Number(o.fuelLoss) || 0;
+            const allowed = Number(o.allowedLoss) || 0.5;
+            if (loss > allowed) fuelBonus = - (loss - allowed) * 100000;
+            else if (loss < allowed) fuelBonus = (allowed - loss) * 50000;
+            totalFuelBonus += fuelBonus;
+
+            const p = getPricing(o.orderId, o.product, orders);
+            const xuatKho = Number(o.amount || 0);
+            const thucGiao = Number(o.deliveredQuantity || o.amount || 0);
+            const haoHutLt = xuatKho - thucGiao;
+            if (haoHutLt > 0) totalHaoHut += haoHutLt * p.cost;
+        })
+
         const approvedExpenses = filteredExpenses.filter(e => e.status === 'approved')
         const driverExpenseCost = approvedExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
 
@@ -111,7 +131,8 @@ function OverviewDashboard() {
         const transactionExpenses = filteredTransactions.filter(t => t.type === 'expense')
         const transactionCost = transactionExpenses.reduce((sum, t) => sum + (Number(t.totalAmount) || Number(t.amount) || 0), 0)
 
-        const cost = driverExpenseCost + transactionCost + costOfGoods;
+        // Đồng bộ với App: Cost = Giá vốn + Chi phí lái xe + Giao dịch + Hao hụt
+        const cost = driverExpenseCost + transactionCost + costOfGoods + totalHaoHut;
         const netProfit = revenue - cost;
 
         const approvedUsers = users.filter(u => u.isApproved !== false)
@@ -167,24 +188,7 @@ function OverviewDashboard() {
         })
 
         const costMap = {}
-        const totalBaseSalary = approvedUsers.filter(u => u.role === 'driver').reduce((sum, d) => sum + Number(d.baseSalary || 0), 0);
-        let totalFuelBonus = 0;
-        let totalHaoHut = 0;
-
-        completedOrders.forEach(o => {
-            let fuelBonus = 0;
-            const loss = Number(o.fuelLoss) || 0;
-            const allowed = Number(o.allowedLoss) || 0.5;
-            if (loss > allowed) fuelBonus = - (loss - allowed) * 100000;
-            else if (loss < allowed) fuelBonus = (allowed - loss) * 50000;
-            totalFuelBonus += fuelBonus;
-
-            const p = getPricing(o.orderId, o.product, orders);
-            const xuatKho = Number(o.amount || 0);
-            const thucGiao = Number(o.deliveredQuantity || o.amount || 0);
-            const haoHutLt = xuatKho - thucGiao;
-            if (haoHutLt > 0) totalHaoHut += haoHutLt * p.cost;
-        })
+        // Đã tính ở trên cho KPI chính
 
         if (costOfGoods > 0) costMap['Giá vốn hàng'] = costOfGoods;
         if ((totalBaseSalary + totalFuelBonus) > 0) costMap['Nhân sự'] = totalBaseSalary + totalFuelBonus;
