@@ -1,4 +1,5 @@
 const { db } = require('../config/firebase');
+const { FieldValue } = require('firebase-admin/firestore');
 
 const VEHICLES_COLLECTION = 'vehicles';
 const DELIVERY_ORDERS_COLLECTION = 'deliveryOrders';
@@ -158,11 +159,12 @@ const getAllDriverTripStats = async () => {
 
 // Cập nhật tọa độ GPS (Real-time Tracking)
 const updateOrderLocation = async (orderId, lat, lng) => {
+    const coords = { lat: Number(lat), lng: Number(lng), timestamp: new Date() };
     await db.collection(DELIVERY_ORDERS_COLLECTION).doc(orderId).update({
-        currentLat: lat,
-        currentLng: lng,
+        currentLocation: { lat: Number(lat), lng: Number(lng) },
         lastLocationUpdate: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        locationHistory: FieldValue.arrayUnion(coords)
     });
     return { success: true };
 };

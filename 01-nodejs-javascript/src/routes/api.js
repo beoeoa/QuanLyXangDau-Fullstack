@@ -1,6 +1,11 @@
 const express = require('express');
 const routerAPI = express.Router();
 
+// Route kiểm tra trạng thái API tại /api
+routerAPI.get('/', (req, res) => {
+    res.json({ message: 'Logistics API is active and ready!' });
+});
+
 const {
     // Users
     getUsers, getUserById, getUserByEmail, registerUser,

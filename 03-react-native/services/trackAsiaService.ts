@@ -2,6 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const TRACKASIA_API_KEY = '9cb71773659040a8af8b9d0b56ed01e032';
 
+// Helper để parse JSON an toàn
+const safeParseJSON = async (res: Response) => {
+  try {
+    const text = await res.text();
+    if (!text) return null;
+    return JSON.parse(text);
+  } catch (e) {
+    console.warn('[TrackAsia] Phản hồi không phải JSON:', res.url);
+    return null;
+  }
+};
+
 /**
  * Lấy URL Tile cho Bản đồ Raster TrackAsia
  */
@@ -16,7 +28,7 @@ export const getTrackAsiaRoute = async (startLat: number, startLng: number, endL
   try {
     const url = `https://maps.track-asia.com/route/v1/car/${startLng},${startLat};${endLng},${endLat}.json?key=${TRACKASIA_API_KEY}&overview=full&geometries=geojson`;
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await safeParseJSON(res);
     
     if (data && data.routes && data.routes.length > 0) {
       const route = data.routes[0];
@@ -50,7 +62,7 @@ export const searchTrackAsiaAddress = async (text: string, lat?: number, lng?: n
       // url += `&focus.point.lat=${lat}&focus.point.lon=${lng}`; // Uncomment if API supports
     }
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await safeParseJSON(res);
     // TrackAsia returns GeoJSON FeatureCollection
     if (data && data.features) {
       return data.features.map((f: any) => ({

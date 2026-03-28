@@ -37,12 +37,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Offline-First: Khi vừa mở App lên, đọc từ Secure Store xem có phiên cũ không
     try {
       const sessionStr = await SecureStore.getItemAsync('user_session');
-      if (sessionStr) {
-        const user = JSON.parse(sessionStr);
-        set({ user });
+      // Tránh lỗi JSON.parse("") -> "Unexpected end of input"
+      if (sessionStr && sessionStr.trim().length > 0) {
+        try {
+          const user = JSON.parse(sessionStr);
+          if (user && user.userId) {
+            set({ user });
+          }
+        } catch (parseError) {
+          console.warn('Dữ liệu session cũ không hợp lệ, đang xóa...', parseError);
+          await SecureStore.deleteItemAsync('user_session');
+        }
       }
     } catch (e) {
-      console.log('Lỗi đọc session từ SecureStore:', e);
+      console.error('Lỗi nghiêm trọng khi đọc session:', e);
     } finally {
       set({ isHydrated: true });
     }

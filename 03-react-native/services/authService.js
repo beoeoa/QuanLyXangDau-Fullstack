@@ -2,41 +2,47 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  FacebookAuthProvider,
+  signInWithCredential
 } from 'firebase/auth'
 import { auth } from './firebaseConfig'
-import { Platform, NativeModules } from 'react-native'
+import { Platform, NativeModules, Alert } from 'react-native'
 
 // Tự động nhận diện IP LAN của máy tính đang chạy Expo
-const getLocalIp = () => {
-  try {
-    const scriptURL = NativeModules.SourceCode?.scriptURL;
-    if (scriptURL) {
-      const match = scriptURL.match(/http:\/\/([^:]+):/);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-  } catch (e) {}
-  return '192.168.1.33';
-};
-
-const LAN_IP = getLocalIp();
-
 const getApiUrl = () => {
   const envUrl = typeof process !== 'undefined' ? process?.env?.EXPO_PUBLIC_API_URL : null
   if (envUrl && typeof envUrl === 'string') return envUrl
 
-  if (__DEV__) {
-    // URL cố định của backend trên Render (production)
-    return 'https://quanlyxangdau-fullstack.onrender.com/api'
-  }
-  return 'https://api.yourbackend.com/api'
+  // Luôn trả về URL Render cho môi trường Production/Staging trên điện thoại thật
+  return 'https://quanlyxangdau-fullstack.onrender.com/api'
 }
 
 const API_URL = getApiUrl()
 
-const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+// Helper để parse JSON an toàn tuyệt đối
+const safeParseJSON = async (res) => {
+  try {
+    const text = await res.text().catch(() => "");
+    if (!text || text.trim() === "") {
+      console.log(`[API] Response body is empty (Status: ${res.status})`);
+      return null;
+    }
+    
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.warn(`[API] Invalid JSON received (Status: ${res.status}):`, text.substring(0, 100));
+      return null;
+    }
+  } catch (err) {
+    console.error('[API] Error in safeParseJSON:', err.message);
+    return null;
+  }
+};
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 12000) => {
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -47,8 +53,11 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
 }
 
 const getOrCreateUserDoc = async (user, additionalData = {}) => {
+  if (!user || !user.uid) return null;
+
   try {
-    const res = await fetchWithTimeout(`${API_URL}/users/get-or-create`, {
+    const url = `${API_URL}/users/get-or-create?t=${Date.now()}`;
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -58,15 +67,30 @@ const getOrCreateUserDoc = async (user, additionalData = {}) => {
         photoURL: user.photoURL || null,
         ...additionalData
       })
-    })
+    });
 
+    const text = await res.text().catch(() => "");
+    
     if (!res.ok) {
-      const errData = await res.json()
-      throw new Error(errData.message || errData.error || 'Lỗi từ Backend')
+      console.warn(`[API] Server error ${res.status}: ${text}`);
+      throw new Error(`Lỗi Server (${res.status})`);
     }
-    return await res.json()
+
+    if (!text || text.trim() === "") {
+      throw new Error("Server trả về phản hồi rỗng.");
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("[DEBUG] Dữ liệu lỗi JSON:", text);
+      // Hiển thị Alert để anh chụp màn hình lỗi cho em xem
+      Alert.alert("Lỗi dữ liệu API", "Server trả về nội dung không phải JSON: " + text.substring(0, 50));
+      throw new Error("Dữ liệu từ Server bị lỗi định dạng JSON.");
+    }
   } catch (err) {
-    throw err
+    console.error('[API] getOrCreateUserDoc Error:', err.message);
+    throw err;
   }
 }
 
@@ -91,13 +115,14 @@ export const registerWithEmail = async (email, password, userData) => {
           isApproved: false
         })
       })
-      const result = await res.json()
+      
+      const result = await safeParseJSON(res);
 
-      if (!result.success) {
+      if (!res.ok || !result?.success) {
         return {
           success: true,
           userId: user.uid,
-          message: '⚠️ Đăng ký Auth OK nhưng LỖI lưu dữ liệu: ' + (result.message || '')
+          message: '⚠️ Đăng ký Auth OK nhưng LỖI lưu dữ liệu: ' + (result?.message || `HTTP ${res.status}`)
         }
       }
     } catch (apiErr) {
@@ -144,15 +169,15 @@ export const loginWithEmail = async (email, password) => {
       message: 'Đăng nhập thành công'
     }
   } catch (error) {
-    console.error('❌ Login error:', error)
+    console.error('❌ Login error FULL:', error)
     if (error?.name === 'AbortError') {
-      return { success: false, message: 'Kết nối Backend bị timeout. Kiểm tra API URL (EXPO_PUBLIC_API_URL) hoặc mạng.' }
+      return { success: false, message: 'Kết nối Backend bị timeout (do Render đang khởi động). Vui lòng thử lại sau 10 giây.' }
     }
     if (error instanceof TypeError && error.message.includes('Network request failed')) {
       return { success: false, message: 'Không thể kết nối Backend API. Kiểm tra mạng hoặc IP server.' }
     }
 
-    let message = 'Email hoặc mật khẩu không chính xác'
+    let message = error.message || 'Đăng nhập thất bại (Lỗi hệ thống)'
     if (error.code === 'auth/user-not-found') message = 'Email không tồn tại'
     else if (error.code === 'auth/wrong-password') message = 'Mật khẩu không chính xác'
     else if (error.code === 'auth/invalid-email') message = 'Email không hợp lệ'
@@ -161,6 +186,43 @@ export const loginWithEmail = async (email, password) => {
     return { success: false, message: error.code ? message : error.message }
   }
 }
+
+// ✅ Đăng nhập bằng Social (Google / Facebook)
+export const loginWithSocial = async (idToken, providerType) => {
+  try {
+    let credential;
+    if (providerType === 'google') {
+      credential = GoogleAuthProvider.credential(idToken);
+    } else if (providerType === 'facebook') {
+      credential = FacebookAuthProvider.credential(idToken);
+    } else {
+      throw new Error('Loại xác thực không hỗ trợ');
+    }
+
+    // 1. Đăng nhập vào Firebase bằng Credential
+    const userCredential = await signInWithCredential(auth, credential);
+    const user = userCredential.user;
+
+    // 2. Lấy hoặc Tạo User Document trên Backend
+    const userData = await getOrCreateUserDoc(user);
+
+    return {
+      success: true,
+      userId: userData?.uid || user.uid,
+      email: userData?.email || user.email,
+      name: userData?.fullname || user.displayName,
+      role: userData?.role || 'pending',
+      isApproved: userData?.isApproved || false,
+      message: 'Đăng nhập Social thành công'
+    };
+  } catch (error) {
+    console.error(`❌ Social Login (${providerType}) error:`, error);
+    return { 
+      success: false, 
+      message: error.message || 'Lỗi khi kết nối với mạng xã hội' 
+    };
+  }
+};
 
 // ✅ Đăng xuất
 export const logout = async () => {
@@ -199,7 +261,7 @@ export const verifyUserRole = async (userId, expectedRole) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, expectedRole })
     })
-    return await res.json()
+    return await safeParseJSON(res) || { success: false, message: 'Lỗi phản hồi' };
   } catch (error) {
     console.error('Verify role error:', error)
     return { success: false, message: 'Lỗi kiểm tra vai trò' }

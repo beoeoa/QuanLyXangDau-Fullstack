@@ -10,5 +10,9 @@
   },
   "name": "Do_an",
   "version": "1.0.0",
-  "scripts": {}
+  "scripts": {},
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "typescript": "~5.9.2"
+  }
 }

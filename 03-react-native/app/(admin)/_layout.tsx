@@ -28,10 +28,21 @@ export default function AdminLayout() {
         name="fleet" 
         options={{ title: 'Đội Xe', tabBarIcon: ({color}) => <MaterialCommunityIcons name="truck-outline" size={26} color={color} /> }} 
       />
+      <Tabs.Screen 
+        name="employees" 
+        options={{ title: 'Nhân Sự', tabBarIcon: ({color}) => <Ionicons name="people-outline" size={24} color={color} /> }} 
+      />
       
-      {/* Ẩn bớt các tab phụ không ưu tiên trên thanh điều hướng dưới */}
-      <Tabs.Screen name="logs" options={{ href: null }} />
+      {/* Các trang quản trị phụ ẩn khỏi bottom tab nhưng có thể điều hướng từ menu Thêm */}
+      <Tabs.Screen name="sales-orders" options={{ href: null }} />
+      <Tabs.Screen name="price-list" options={{ href: null }} />
+      <Tabs.Screen name="contracts" options={{ href: null }} />
+      <Tabs.Screen name="work-diary" options={{ href: null }} />
+      <Tabs.Screen name="audit-logs" options={{ href: null }} />
+      <Tabs.Screen name="approvals" options={{ href: null }} />
       <Tabs.Screen name="suppliers" options={{ href: null }} />
+      <Tabs.Screen name="logs" options={{ href: null }} />
+      <Tabs.Screen name="sos" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,11 +19,16 @@ export default function TripDetailScreen() {
   const router = useRouter();
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { user } = useAuthStore();
+  
   const [trip, setTrip] = useState<any>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [timeline, setTimeline] = useState<{ step: number; time: string }[]>([]);
+  
+  const [sealCode, setSealCode] = useState('');
+  const [deliveredAmount, setDeliveredAmount] = useState('');
+  const [docs, setDocs] = useState<any>({});
 
   useEffect(() => {
     const load = async () => {
@@ -34,6 +39,9 @@ export default function TripDetailScreen() {
           setTrip(found);
           const stepIdx = TRIP_STEPS.findIndex((s) => s.apiStatus === found.status);
           setCurrentStep(stepIdx >= 0 ? stepIdx : 0);
+          if (found.sealCode) setSealCode(found.sealCode);
+          if (found.deliveredQuantity) setDeliveredAmount(found.deliveredQuantity.toString());
+          if (found.documents) setDocs(found.documents);
 
           // Load existing status history into timeline
           if (found.statusHistory && Array.isArray(found.statusHistory)) {
@@ -59,6 +67,16 @@ export default function TripDetailScreen() {
     if (currentStep >= 4 || !trip) return;
     const nextStep = TRIP_STEPS[currentStep + 1];
 
+    // Validation
+    if (currentStep === 1 && !sealCode) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập mã kẹp chì (Seal) trước khi tiếp tục.');
+      return;
+    }
+    if (currentStep === 3 && !deliveredAmount) {
+      Alert.alert('Thiếu số liệu', 'Vui lòng nhập số Lít THỰC GIAO để hoàn thành.');
+      return;
+    }
+
     Alert.alert(
       'Xác nhận chuyển trạng thái',
       `Chuyển sang: "${nextStep.text}"?`,
@@ -72,7 +90,20 @@ export default function TripDetailScreen() {
             if (currentStep === 0 && trip.id) await startBackgroundTracking(trip.id);
             if (currentStep === 3) await stopBackgroundTracking();
 
-            await updateTripStatus(trip.id, nextStep.apiStatus);
+            const extraData: any = {};
+            if (currentStep === 1) extraData.sealCode = sealCode;
+            if (currentStep === 3) {
+                const original = Number(trip.amount || 0);
+                const delivered = Number(deliveredAmount);
+                const loss = original - delivered;
+                const lossPercent = original > 0 ? (loss / original) * 100 : 0;
+                extraData.deliveredQuantity = delivered;
+                extraData.loss = loss;
+                extraData.lossPercent = Number(lossPercent.toFixed(2));
+                extraData.documents = docs;
+            }
+
+            await updateTripStatus(trip.id, nextStep.apiStatus, extraData);
 
             setTimeline((prev) => [...prev, {
               step: currentStep + 1,
@@ -84,6 +115,11 @@ export default function TripDetailScreen() {
         },
       ]
     );
+  };
+
+  const handleSimulateDoc = (type: string) => {
+    setDocs((prev: any) => ({ ...prev, [type]: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=SIMULATED_DOC' }));
+    Alert.alert('Thành công', 'Đã đính kèm ảnh chứng từ.');
   };
 
   if (loading) {
@@ -150,6 +186,27 @@ export default function TripDetailScreen() {
           ))}
         </View>
 
+        {/* Input for Seal if at step 1 or more */}
+        {(currentStep >= 1 || trip.sealCode) && (
+          <View style={styles.inputCard}>
+            <Text style={styles.inputTitle}>🔑 Mã Kẹp Chì (Seal)</Text>
+            <View style={styles.sealInputRow}>
+               <TextInput
+                 style={[styles.input, currentStep > 1 && styles.inputDisabled]}
+                 placeholder="Nhập mã kẹp chì tại kho..."
+                 value={sealCode}
+                 onChangeText={setSealCode}
+                 editable={currentStep === 1}
+               />
+               {currentStep === 1 && (
+                   <TouchableOpacity style={styles.saveMiniBtn} onPress={() => Alert.alert('Thông báo', 'Đã lưu tạm mã kẹp chì.')}>
+                        <Ionicons name="save" size={20} color="#fff" />
+                   </TouchableOpacity>
+               )}
+            </View>
+          </View>
+        )}
+
         {/* Trip Info Card */}
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>Thông Tin Chuyến</Text>
@@ -174,49 +231,52 @@ export default function TripDetailScreen() {
             <Text style={styles.infoLabel}>Xe:</Text>
             <Text style={styles.infoValue}>{trip.vehiclePlate || '---'}</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Ionicons name="calendar" size={18} color="#f59e0b" />
-            <Text style={styles.infoLabel}>Ngày tạo:</Text>
-            <Text style={styles.infoValue}>
-              {trip.createdAt ? new Date(trip.createdAt).toLocaleDateString('vi-VN') : 'Hôm nay'}
-            </Text>
-          </View>
         </View>
 
-        {/* Items detail if available */}
-        {trip.items && Array.isArray(trip.items) && trip.items.length > 0 && (
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>Chi Tiết Hầm/Điểm ({trip.items.length})</Text>
-            {trip.items.map((item: any, idx: number) => (
-              <View key={idx} style={[styles.infoRow, { backgroundColor: '#f8fafc' }]}>
-                <Text style={[styles.infoLabel, { color: '#6366f1', fontWeight: '700' }]}>
-                  {item.compartment || `K${idx + 1}`}
-                </Text>
-                <Text style={styles.infoValue}>
-                  {item.product} • {item.amount}L → {item.destination}
-                </Text>
-              </View>
-            ))}
-          </View>
+        {/* Final step documents and quantity */}
+        {(currentStep >= 3 || trip.status === 'completed') && (
+            <View style={styles.inputCard}>
+                <Text style={styles.inputTitle}>📊 Hoàn Tất Giao Nhận</Text>
+                <Text style={styles.label}>Số Lít THỰC GIAO (Xuất: {trip.amount} L)</Text>
+                <TextInput
+                    style={[styles.input, currentStep === 4 && styles.inputDisabled]}
+                    placeholder="Nhập số lít thực tế..."
+                    keyboardType="numeric"
+                    value={deliveredAmount}
+                    onChangeText={setDeliveredAmount}
+                    editable={currentStep === 3}
+                />
+                
+                {deliveredAmount && (
+                    <View style={styles.lossPreview}>
+                        <Text style={styles.lossText}>
+                            Hao hụt: {Number(trip.amount || 0) - Number(deliveredAmount)} L 
+                            ({((Number(trip.amount || 0) - Number(deliveredAmount)) / Number(trip.amount || 1) * 100).toFixed(2)}%)
+                        </Text>
+                    </View>
+                )}
+
+                <Text style={[styles.label, {marginTop: 15}]}>Ảnh chứng từ quan trọng</Text>
+                <View style={styles.docGrid}>
+                    {[
+                        { key: 'deliveryReceipt', label: 'Biên bản GN' },
+                        { key: 'lossReport', label: 'Phiếu hao hụt' },
+                        { key: 'exportSlip', label: 'Phiếu xuất kho' }
+                    ].map(doc => (
+                        <TouchableOpacity 
+                            key={doc.key} 
+                            style={[styles.docBtn, docs[doc.key] && styles.docBtnActive]} 
+                            onPress={() => currentStep === 3 && handleSimulateDoc(doc.key)}
+                        >
+                            <Ionicons name={docs[doc.key] ? "image" : "camera"} size={20} color={docs[doc.key] ? "#fff" : "#4f46e5"} />
+                            <Text style={[styles.docLabel, docs[doc.key] && {color:'#fff'}]}>{doc.label}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </View>
         )}
 
-        {/* Quick Actions */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/(driver)/camera')}
-          >
-            <Ionicons name="camera" size={28} color="#4f46e5" />
-            <Text style={styles.actionLabel}>Chụp Niêm Chì</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push({ pathname: '/(driver)/expense-form', params: { orderId: trip.id } })}
-          >
-            <Ionicons name="receipt" size={28} color="#0ea5e9" />
-            <Text style={styles.actionLabel}>Ghi Chi Phí</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={{height: 100}} />
       </ScrollView>
 
       {/* Bottom Action Button */}
@@ -250,61 +310,40 @@ export default function TripDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { justifyContent: 'center', alignItems: 'center' },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 55, paddingHorizontal: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff',
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 55, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff' },
   headerBack: { padding: 4 },
   headerTitle: { color: '#0f172a', fontSize: 18, fontWeight: '700' },
-
   scroll: { flex: 1, padding: 16 },
-
   stepperContainer: { marginBottom: 20, backgroundColor: '#ffffff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   stepRow: { flexDirection: 'row', minHeight: 56 },
   stepIndicator: { alignItems: 'center', width: 36, marginRight: 12 },
-  stepCircle: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#f1f5f9', borderWidth: 2, borderColor: '#e2e8f0',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  stepCircleActive: {
-    elevation: 4,
-    shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3, shadowRadius: 6,
-  },
+  stepCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', borderWidth: 2, borderColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' },
+  stepCircleActive: { elevation: 4, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 },
   stepLine: { width: 2, flex: 1, backgroundColor: '#e2e8f0', marginVertical: 4 },
   stepContent: { flex: 1, paddingTop: 5 },
   stepText: { color: '#94a3b8', fontSize: 15, fontWeight: '600' },
   stepTime: { color: '#10b981', fontSize: 12, marginTop: 2 },
-
-  infoCard: {
-    backgroundColor: '#ffffff', borderRadius: 16,
-    padding: 18, marginBottom: 16,
-    borderWidth: 1, borderColor: '#e2e8f0',
-  },
+  infoCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   infoTitle: { color: '#0f172a', fontSize: 17, fontWeight: '800', marginBottom: 14 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8, padding: 4, borderRadius: 8 },
   infoLabel: { color: '#64748b', fontSize: 14 },
   infoValue: { color: '#0f172a', fontSize: 14, fontWeight: '600', flex: 1 },
   infoDivider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 8 },
-
-  actionRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  actionCard: {
-    flex: 1, backgroundColor: '#ffffff', borderRadius: 16,
-    padding: 20, alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: '#e2e8f0',
-  },
-  actionLabel: { color: '#334155', fontSize: 13, fontWeight: '600' },
-
-  mainBtn: {
-    marginHorizontal: 16, marginBottom: 30,
-    paddingVertical: 20, borderRadius: 16, alignItems: 'center',
-    elevation: 5,
-  },
+  inputCard: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  inputTitle: { fontSize: 16, fontWeight: '800', color: '#1e293b', marginBottom: 12 },
+  sealInputRow: { flexDirection: 'row', gap: 10 },
+  input: { flex: 1, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, padding: 12, fontSize: 16 },
+  inputDisabled: { backgroundColor: '#f1f5f9', color: '#94a3b8' },
+  saveMiniBtn: { backgroundColor: '#4f46e5', width: 44, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  label: { fontSize: 13, color: '#64748b', marginBottom: 6, fontWeight: '600' },
+  lossPreview: { marginTop: 10, backgroundColor: '#fff1f2', padding: 10, borderRadius: 8 },
+  lossText: { color: '#e11d48', fontWeight: 'bold', fontSize: 13 },
+  docGrid: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  docBtn: { flex: 1, height: 70, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, justifyContent: 'center', alignItems: 'center', gap: 4 },
+  docBtnActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  docLabel: { fontSize: 10, color: '#64748b', fontWeight: 'bold', textAlign: 'center' },
+  mainBtn: { marginHorizontal: 16, marginBottom: 30, paddingVertical: 20, borderRadius: 16, alignItems: 'center', elevation: 5 },
   mainBtnText: { color: '#fff', fontSize: 20, fontWeight: '900' },
-
   backBtn: { marginTop: 20, padding: 12, backgroundColor: '#e2e8f0', borderRadius: 10 },
   backBtnText: { color: '#0f172a', fontWeight: '600' },
 });

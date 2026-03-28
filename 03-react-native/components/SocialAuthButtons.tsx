@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View, Image, Platform } from 'react-native';
+import { loginWithSocial } from '../services/authService';
 
 type SocialAuthProps = {
   onAuthSuccess: (result: any) => void;
@@ -32,18 +33,24 @@ export default function SocialAuthButtons({ onAuthSuccess, onError, disabled }: 
     }
     try {
       await GoogleSignin.hasPlayServices();
-      // SỬA DÒNG NÀY: Dùng cú pháp bóc tách { data } mới của thư viện
-      const { data } = await GoogleSignin.signIn();
+      // 1. Thực hiện Đăng nhập Google Native
+      const signInResult = await GoogleSignin.signIn();
+      
+      const idToken = signInResult.data?.idToken;
+      if (!idToken) {
+        throw new Error('Không lấy được ID Token từ Google');
+      }
 
-      // SỬA DÒNG NÀY: Truy cập vào data.user.email để tránh lỗi undefined
-      onAuthSuccess({
-        email: data?.user?.email || 'N/A',
-        isApproved: true,
-        role: 'user',
-        message: 'Google success demo'
-      });
+      // 2. Gọi logic Backend / Firebase của chúng ta
+      const result = await loginWithSocial(idToken, 'google');
+      
+      if (result.success) {
+        onAuthSuccess(result);
+      } else {
+        onError(result.message);
+      }
     } catch (error: any) {
-      onError('Lỗi đăng nhập Google: ' + error.message);
+      onError('Lỗi đăng nhập Google: ' + (error.message || 'Hủy bỏ'));
     }
   };
 
@@ -53,19 +60,29 @@ export default function SocialAuthButtons({ onAuthSuccess, onError, disabled }: 
       return;
     }
     try {
-      const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
-      if (result.isCancelled) {
+      const loginResult = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+      if (loginResult.isCancelled) {
         onError('Người dùng đã hủy đăng nhập Facebook.');
         return;
       }
+
+      // 1. Lấy Access Token từ Facebook
       const data = await AccessToken.getCurrentAccessToken();
-      if (!data) {
+      if (!data || !data.accessToken) {
         onError('Không thể lấy Facebook Access Token.');
         return;
       }
-      onAuthSuccess({ email: 'fb_demo@example.com', isApproved: true, role: 'user', message: 'FB success demo' });
+
+      // 2. Gọi logic Backend / Firebase
+      const result = await loginWithSocial(data.accessToken, 'facebook');
+      
+      if (result.success) {
+        onAuthSuccess(result);
+      } else {
+        onError(result.message);
+      }
     } catch (error: any) {
-      onError('Lỗi đăng nhập Facebook: ' + error.message);
+      onError('Lỗi đăng nhập Facebook: ' + (error.message || 'Lỗi không xác định'));
     }
   };
 
@@ -76,7 +93,6 @@ export default function SocialAuthButtons({ onAuthSuccess, onError, disabled }: 
         onPress={handleGoogleLogin}
         disabled={disabled}
       >
-        {/* Placeholder cho icon */}
         <Text style={styles.googleText}>G</Text>
         <Text style={styles.btnText}>Tiếp tục với Google</Text>
       </TouchableOpacity>

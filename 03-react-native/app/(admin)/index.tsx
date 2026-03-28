@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useAuthStore } from '../../store/authStore';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState, useCallback, useMemo } from 'react';
-import { fetchAllDriverExpenses, fetchDeliveryLogs, fetchOrders, fetchTransactions, fetchFleetVehicles, fetchUsers } from '../../services/dataService';
+import { fetchAllDriverExpenses, fetchDeliveryLogs, fetchOrders, fetchTransactions, fetchFleetVehicles, fetchUsers, fetchMonthlyRevenue } from '../../services/dataService';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 export default function AdminDashboardScreen() {
@@ -10,12 +10,14 @@ export default function AdminDashboardScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'day' | 'month' | 'year'>('day');
+  const [refDate, setRefDate] = useState(new Date());
   const [orders, setOrders] = useState<any[]>([]);
   const [saleOrders, setSaleOrders] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [monthlyData, setMonthlyData] = useState<{label:string;rev:number;exp:number}[]>([]);
   const [showProfile, setShowProfile] = useState(false);
 
   const loadData = async () => {
@@ -39,6 +41,10 @@ export default function AdminDashboardScreen() {
       setTransactions(trans || []);
       setVehicles(vhcs || []);
       setAllUsers(usrs || []);
+
+      // Load biểu đồ lợi nhuận 6 tháng từ dữ liệu thực
+      const monthly = await fetchMonthlyRevenue();
+      setMonthlyData(monthly as any || []);
     } catch (e) { console.error(e); }
     // nếu lỗi, vẫn tắt loading để UI không treo
     setLoading(false);
@@ -84,20 +90,35 @@ export default function AdminDashboardScreen() {
     return null;
   };
 
-  const inPeriod = (d: Date | null, now: Date) => {
+  const handlePrev = () => {
+    const d = new Date(refDate);
+    if (period === 'day') d.setDate(d.getDate() - 1);
+    else if (period === 'month') d.setMonth(d.getMonth() - 1);
+    else d.setFullYear(d.getFullYear() - 1);
+    setRefDate(d);
+  };
+
+  const handleNext = () => {
+    const d = new Date(refDate);
+    if (period === 'day') d.setDate(d.getDate() + 1);
+    else if (period === 'month') d.setMonth(d.getMonth() + 1);
+    else d.setFullYear(d.getFullYear() + 1);
+    setRefDate(d);
+  };
+
+  const inPeriod = (d: Date | null, ref: Date) => {
     if (!d) return period === 'year';
     
     const dTime = d.getTime();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfDay = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate()).getTime();
 
     if (period === 'day') {
-      // web uses startOfDay -> now, but we use startOfDay -> endOfDay to be safe
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).getTime();
+      const endOfDay = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 23, 59, 59).getTime();
       return dTime >= startOfDay && dTime <= endOfDay;
     }
     
-    if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    return d.getFullYear() === now.getFullYear();
+    if (period === 'month') return d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+    return d.getFullYear() === ref.getFullYear();
   };
 
   // Khởi tạo Map (nằm ngoài useMemo nhưng vì reqOrders thay đổi reference nên reference map vẫn đúng)
@@ -117,82 +138,42 @@ export default function AdminDashboardScreen() {
     const cost = Number(i.costPrice || 0);
     const margin = Number(i.margin || 0);
     const freight = Number(i.freight || 0);
-    return { cost, margin, freight, totalUnit: (cost + margin + freight) || 20700 };
+    const totalUnit = cost + margin + freight;
+    return { cost, margin, freight, totalUnit: totalUnit || 20700 };
   };
 
   const currentFinance = useMemo(() => {
-    const now = new Date();
-    // Lọc qua updatedAt, fallback createdAt
+    const now = refDate;
     const filteredTrips = (orders || []).filter(o => inPeriod(toDateSafe(o.updatedAt || o.createdAt), now) && o.status === 'completed');
 
     let revenue = 0;
     let costOfGoods = 0;
+    let totalHaoHut = 0;
+
     filteredTrips.forEach(o => {
       const qty = Number(o.amount) || 0;
       const p = getPricing(o.orderId, o.product, saleOrders || []);
-      revenue += qty * (p.totalUnit || 0);
-      costOfGoods += qty * (p.cost || 0);
+      revenue += qty * p.totalUnit;
+      costOfGoods += qty * p.cost;
+
+      // Tính hao hụt (giống Web logic)
+      const xuatKho = Number(o.amount || 0);
+      const thucGiao = Number(o.deliveredQuantity || o.amount || 0);
+      const haoHutLt = xuatKho - thucGiao;
+      if (haoHutLt > 0) totalHaoHut += haoHutLt * p.cost;
     });
 
-    // Lọc qua date, fallback createdAt
     const approvedExpenses = (expenses || []).filter(e => e.status === 'approved' && inPeriod(toDateSafe(e.date || e.createdAt), now));
     const apCost = approvedExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-    // Lọc transactions qua createdAt
     const txExpense = (transactions || []).filter(t => t.type === 'expense' && inPeriod(toDateSafe(t.createdAt), now));
     const txCost = txExpense.reduce((s, t) => s + (Number(t.totalAmount) || Number(t.amount) || 0), 0);
 
-    const totalCost = costOfGoods + apCost + txCost;
+    const totalCost = costOfGoods + apCost + txCost + totalHaoHut;
     return { rev: revenue, exp: totalCost, prof: revenue - totalCost };
-  }, [orders, saleOrders, expenses, transactions, period]);
-
-  const monthlyHistory = useMemo(() => {
-    const now = new Date();
-    const history = [];
-    for (let i = 0; i < 6; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const month = d.getMonth();
-        const year = d.getFullYear();
-        
-        const filteredTrips = (orders || []).filter(o => {
-            const dt = toDateSafe(o.updatedAt || o.createdAt);
-            return dt && dt.getMonth() === month && dt.getFullYear() === year && o.status === 'completed';
-        });
-
-        let revenue = 0;
-        let cogs = 0;
-        filteredTrips.forEach(o => {
-            const qty = Number(o.amount) || 0;
-            const p = getPricing(o.orderId, o.product, saleOrders || []);
-            revenue += qty * (p.totalUnit || 0);
-            cogs += qty * (p.cost || 0);
-        });
-
-        const monthExpenses = (expenses || []).filter(e => {
-            const dt = toDateSafe(e.date || e.createdAt);
-            return dt && dt.getMonth() === month && dt.getFullYear() === year && e.status === 'approved';
-        });
-        const expAmt = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-
-        const txExp = (transactions || []).filter(t => {
-            const dt = toDateSafe(t.createdAt);
-            return dt && dt.getMonth() === month && dt.getFullYear() === year && t.type === 'expense';
-        });
-        const txAmt = txExp.reduce((s, t) => s + (Number(t.totalAmount) || Number(t.amount) || 0), 0);
-
-        const totalExp = cogs + expAmt + txAmt;
-        history.push({
-            label: `Tháng ${month + 1}/${year}`,
-            rev: revenue,
-            exp: totalExp,
-            prof: revenue - totalExp
-        });
-    }
-    return history;
-  }, [orders, saleOrders, expenses, transactions]);
+  }, [orders, saleOrders, expenses, transactions, period, refDate]);
 
   const formatVND = (num: number) => {
-
     if (num >= 1000000000) return (num / 1000000000).toFixed(1) + ' Tỷ';
     if (num >= 1000000) return (num / 1000000).toFixed(1) + ' Tr';
     if (num === 0) return '0đ';
@@ -280,20 +261,92 @@ export default function AdminDashboardScreen() {
             <Ionicons name="person-circle" size={40} color="#fff" />
           </TouchableOpacity>
         </View>
- 
+
         <View style={styles.financeCard}>
           <View style={styles.filterTabs}>
             {(['day', 'month', 'year'] as const).map(p => (
-              <TouchableOpacity key={p} style={[styles.tabBtn, period === p && styles.tabActive]} onPress={() => setPeriod(p)}>
+              <TouchableOpacity key={p} style={[styles.tabBtn, period === p && styles.tabActive]} onPress={() => { setPeriod(p); setRefDate(new Date()); }}>
                 <Text style={[styles.tabText, period === p && styles.tabTextActive]}>
-                  {p === 'day' ? 'Hôm nay' : p === 'month' ? 'Tháng này' : 'Năm nay'}
+                  {p === 'day' ? 'Hàng ngày' : p === 'month' ? 'Hàng tháng' : 'Hàng năm'}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Navigator chọn thời gian */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 }}>
+            <TouchableOpacity onPress={handlePrev} style={{ padding: 6, backgroundColor: '#fff', borderRadius: 8 }}>
+              <Ionicons name="chevron-back" size={20} color="#0070f3" />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1e293b' }}>
+              {period === 'day' ? refDate.toLocaleDateString('vi-VN') : period === 'month' ? `Tháng ${refDate.getMonth() + 1}/${refDate.getFullYear()}` : `Năm ${refDate.getFullYear()}`}
+            </Text>
+            <TouchableOpacity onPress={handleNext} style={{ padding: 6, backgroundColor: '#fff', borderRadius: 8 }}>
+              <Ionicons name="chevron-forward" size={20} color="#0070f3" />
+            </TouchableOpacity>
+          </View>
           {loading ? <ActivityIndicator size="large" color="#0A2540" style={{ marginVertical: 20 }} /> : (<>
-            <Text style={styles.netProfitLabel}>Lợi Nhuận Ròng</Text>
-            <Text style={styles.netProfitValue}>{formatVND(currentFinance.prof)}</Text>
+            <Text style={styles.netProfitLabel}>
+              Lợi Nhuận Ròng
+            </Text>
+            <Text style={[styles.netProfitValue, { color: currentFinance.prof >= 0 ? '#0070f3' : '#ef4444' }]}>
+              {formatVND(currentFinance.prof)}
+            </Text>
+
+            {/* 3 chỉ số chi tiết theo kỳ */}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, marginBottom: 8 }}>
+              <View style={{ flex: 1, backgroundColor: '#e0f2fe', borderRadius: 12, padding: 10 }}>
+                <Text style={{ fontSize: 10, color: '#0369a1', fontWeight: '700', marginBottom: 3 }}>DOANH THU</Text>
+                <Text style={{ fontSize: 13, fontWeight: '900', color: '#0070f3' }}>{formatVND(currentFinance.rev)}</Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: '#fee2e2', borderRadius: 12, padding: 10 }}>
+                <Text style={{ fontSize: 10, color: '#991b1b', fontWeight: '700', marginBottom: 3 }}>CHI PHÍ</Text>
+                <Text style={{ fontSize: 13, fontWeight: '900', color: '#ef4444' }}>{formatVND(currentFinance.exp)}</Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: currentFinance.prof >= 0 ? '#dcfce7' : '#fee2e2', borderRadius: 12, padding: 10 }}>
+                <Text style={{ fontSize: 10, color: currentFinance.prof >= 0 ? '#166534' : '#991b1b', fontWeight: '700', marginBottom: 3 }}>LỢI NHUẬN</Text>
+                <Text style={{ fontSize: 13, fontWeight: '900', color: currentFinance.prof >= 0 ? '#16a34a' : '#ef4444' }}>
+                  {formatVND(currentFinance.prof)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.financeDivider} />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#94a3b8', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Lợi nhuận ròng - 6 tháng gần nhất</Text>
+            {/* Biểu đồ 6 tháng - dữ liệu thực */}
+            {(() => {
+              const chartData = monthlyData.length > 0 ? monthlyData : [
+                { label: 'T1', rev: 0, exp: 0 }, { label: 'T2', rev: 0, exp: 0 },
+                { label: 'T3', rev: 0, exp: 0 }, { label: 'T4', rev: 0, exp: 0 },
+                { label: 'T5', rev: 0, exp: 0 }, { label: 'T6', rev: 0, exp: 0 },
+              ];
+              const maxProfit = Math.max(...chartData.map(d => Math.max(d.rev - d.exp, 0)), 1);
+              return (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, paddingBottom: 10 }}>
+                  {chartData.map((bar, i) => {
+                    const profit = bar.rev - bar.exp;
+                    const heightPct = profit > 0 ? Math.round((profit / maxProfit) * 100) : 3;
+                    const isLast = i === chartData.length - 1;
+                    return (
+                      <View key={i} style={{ alignItems: 'center', flex: 1 }}>
+                        <Text style={{ fontSize: 8, color: '#94a3b8', marginBottom: 2 }}>
+                          {profit > 0 ? (profit >= 1e6 ? (profit/1e6).toFixed(0)+'M' : (profit/1000).toFixed(0)+'K') : ''}
+                        </Text>
+                        <View style={{
+                          width: 22,
+                          height: `${heightPct}%`,
+                          backgroundColor: profit < 0 ? '#ff4d4f' : (isLast ? '#0070f3' : '#93c5fd'),
+                          borderRadius: 6,
+                          marginBottom: 8
+                        }} />
+                        <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: 'bold' }}>{bar.label}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+
             <View style={styles.financeDivider} />
             <View style={styles.financeRow}>
               <View style={styles.financeItem}>
@@ -310,31 +363,6 @@ export default function AdminDashboardScreen() {
       </View>
 
       <View style={styles.bodySection}>
-        {/* ===== BÁO CÁO THÁNG ===== */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Lịch sử Tài chính (6 Tháng)</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-          {monthlyHistory.map((m, idx) => (
-            <View key={idx} style={styles.monthCard}>
-              <Text style={styles.monthLabel}>{m.label}</Text>
-              <View style={styles.monthStats}>
-                <View style={styles.monthRow}>
-                  <Text style={styles.mValue}>{formatVND(m.rev)}</Text>
-                  <Text style={styles.mLabel}>Thu</Text>
-                </View>
-                <View style={styles.monthRow}>
-                  <Text style={[styles.mValue, { color: '#ff4d4f' }]}>{formatVND(m.exp)}</Text>
-                  <Text style={styles.mLabel}>Chi</Text>
-                </View>
-              </View>
-              <View style={[styles.profitBadge, { backgroundColor: m.prof >= 0 ? '#52c41a' : '#ff4d4f' }]}>
-                <Text style={styles.profitBadgeText}>{m.prof >= 0 ? '+' : ''}{formatVND(m.prof)}</Text>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tình trạng phân phối (Logistics)</Text>
           <TouchableOpacity onPress={loadData}><Text style={styles.linkText}>⟳ Làm mới</Text></TouchableOpacity>
@@ -359,6 +387,30 @@ export default function AdminDashboardScreen() {
         </View>
         <View style={styles.totalBanner}>
           <Text style={styles.totalBannerText}>📊 Tổng số lệnh: <Text style={{fontWeight:'900'}}>{orders.length}</Text></Text>
+        </View>
+
+        {/* ===== CHỨC NĂNG QUẢN TRỊ ===== */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Chức năng quản trị</Text>
+        </View>
+        <View style={styles.utilGrid}>
+          {[
+            { id: 'sales-orders', label: 'Đơn hàng', icon: 'clipboard-list', color: '#1890ff' },
+            { id: 'price-list', label: 'Bảng giá', icon: 'tag', color: '#faad14' },
+            { id: 'contracts', label: 'Hợp đồng', icon: 'file-contract', color: '#52c41a' },
+            { id: 'employees', label: 'Nhân sự', icon: 'users', color: '#722ed1' },
+            { id: 'work-diary', label: 'Nhật ký chạy', icon: 'calendar-alt', color: '#13c2c2' },
+            { id: 'audit-logs', label: 'Lịch sử HT', icon: 'history', color: '#eb2f96' },
+            { id: 'approvals', label: 'Duyệt User', icon: 'user-check', color: '#fa8c16' },
+            { id: 'sos', label: 'Sự cố SOS', icon: 'exclamation-triangle', color: '#f5222d' },
+          ].map(util => (
+            <TouchableOpacity key={util.id} style={styles.utilCard} onPress={() => router.push(`/(admin)/${util.id}` as any)}>
+              <View style={[styles.utilIconBox, { backgroundColor: util.color + '15' }]}>
+                <FontAwesome5 name={util.icon} size={20} color={util.color} />
+              </View>
+              <Text style={styles.utilLabel}>{util.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* ===== NHÂN SỰ ===== */}
@@ -493,13 +545,10 @@ const styles = StyleSheet.create({
   logoutBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   closeBtnProfile: { paddingVertical: 10 },
   closeBtnText: { color: '#999', fontSize: 14, fontWeight: '600' },
- 
-  monthCard: { backgroundColor: '#fff', width: 140, padding: 12, borderRadius: 16, marginRight: 12, borderBottomWidth: 3, borderBottomColor: '#0070f3', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, elevation: 1 },
-  monthLabel: { fontSize: 13, fontWeight: '700', color: '#64748b', marginBottom: 8 },
-  monthStats: { gap: 4, marginBottom: 8 },
-  monthRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  mValue: { fontSize: 13, fontWeight: '800', color: '#27ae60' },
-  mLabel: { fontSize: 10, color: '#94a3b8', fontWeight: 'bold' },
-  profitBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
-  profitBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+
+  // UTILITIES GRID
+  utilGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  utilCard: { backgroundColor: '#fff', width: '23%', aspectRatio: 1, borderRadius: 16, justifyContent: 'center', alignItems: 'center', padding: 8, elevation: 2, shadowColor: '#000', shadowOffset: {width:0,height:2}, shadowOpacity: 0.05 },
+  utilIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  utilLabel: { fontSize: 10, fontWeight: 'bold', color: '#475569', textAlign: 'center' },
 });

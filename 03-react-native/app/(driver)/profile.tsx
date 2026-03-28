@@ -100,9 +100,22 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             {stats ? (
               <>
+                <View style={styles.salaryCard}>
+                  <View>
+                    <Text style={styles.salaryLabel}>Lương tạm tính (Tháng này)</Text>
+                    <Text style={styles.salaryValue}>{(stats.completedTrips * 500000).toLocaleString('vi-VN')}đ</Text>
+                  </View>
+                  <Ionicons name="wallet" size={32} color="#fff" opacity={0.3} />
+                </View>
+
                 <InfoRow icon="checkmark-circle" label="Chuyến hoàn thành" value={`${stats.completedTrips || 0} chuyến`} />
                 <InfoRow icon="speedometer" label="Tổng km" value={`${stats.totalDistance || 0} km`} />
                 <InfoRow icon="trending-up" label="Tổng khối lượng" value={stats.totalRevenue ? `${Number(stats.totalRevenue).toLocaleString('vi-VN')} Lít` : '---'} />
+                
+                <View style={[styles.infoRow, { marginTop: 15, borderStyle: 'dashed', borderColor: '#cbd5e1' }]}>
+                   <Ionicons name="information-circle" size={18} color="#64748b" />
+                   <Text style={{ fontSize: 12, color: '#64748b', flex: 1 }}>* Lương tính theo định mức 500.000đ/chuyến hoàn thành.</Text>
+                </View>
               </>
             ) : (
               <Text style={styles.emptyText}>Chưa có dữ liệu thống kê</Text>
@@ -118,6 +131,9 @@ export default function ProfileScreen() {
                   <View style={styles.listCardLeft}>
                     <Text style={styles.listCardTitle}>{exp.type || 'Chi phí'}</Text>
                     <Text style={styles.listCardSub}>{exp.description || '---'}</Text>
+                    {exp.status === 'rejected' && exp.rejectionReason && (
+                        <Text style={styles.rejectionText}>Lý do: {exp.rejectionReason}</Text>
+                    )}
                   </View>
                   <View style={styles.listCardRight}>
                     <Text style={styles.listCardAmount}>
@@ -126,7 +142,9 @@ export default function ProfileScreen() {
                     <View style={[styles.statusDot, {
                       backgroundColor: exp.status === 'approved' ? '#10b981' : exp.status === 'rejected' ? '#ef4444' : '#f59e0b'
                     }]}>
-                      <Text style={styles.statusDotText}>{exp.status || 'pending'}</Text>
+                      <Text style={styles.statusDotText}>
+                        {exp.status === 'approved' ? 'Đã duyệt' : exp.status === 'rejected' ? 'Từ chối' : 'Chờ'}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -254,4 +272,13 @@ const styles = StyleSheet.create({
     borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#fecaca',
   },
   logoutText: { color: '#ef4444', fontSize: 15, fontWeight: '700' },
+
+  salaryCard: { 
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#4f46e5', borderRadius: 16, padding: 20, marginBottom: 15,
+    elevation: 4, shadowColor: '#4f46e5', shadowOffset: {width:0, height:4}, shadowOpacity: 0.3, shadowRadius: 8
+  },
+  salaryLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
+  salaryValue: { color: '#fff', fontSize: 24, fontWeight: '900', marginTop: 4 },
+  rejectionText: { color: '#ef4444', fontSize: 11, fontWeight: 'bold', marginTop: 4, fontStyle: 'italic' },
 });

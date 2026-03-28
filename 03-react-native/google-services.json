@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "255173081788",
+    "project_id": "quanlyxangdau-3fa49",
+    "storage_bucket": "quanlyxangdau-3fa49.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255173081788:android:29cd810ce17c050c8a2eb9",
+        "android_client_info": {
+          "package_name": "com.quanlyxangdau.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "255173081788-f7kp6v3h8rvtne0q0m1crfa5re32mru7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.quanlyxangdau.app",
+            "certificate_hash": "dbf632171966c4ff722468d69e1bc11b6421ee2f"
+          }
+        },
+        {
+          "client_id": "255173081788-immv0l75d0pmbig17rumrkrttdr6i10p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC__29yRN84vK2Ix1VuGYIgudl7_JEKI2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "255173081788-immv0l75d0pmbig17rumrkrttdr6i10p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

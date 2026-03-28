@@ -29,9 +29,6 @@ export default function DriverMapScreen() {
   const safeBottom = insets.bottom || (Platform.OS === 'android' ? 16 : 34);
   const router = useRouter();
   const { user } = useAuthStore();
-  const MBT = process.env.MAPBOX_ACCESS_TOKEN;
-  const VMK = process.env.VIETMAP_API_KEY;
-
   const {
     currentLocation, setCurrentLocation,
     routeCoordinates, addRouteCoordinate,
@@ -342,8 +339,8 @@ body{margin:0;padding:0;font-family:-apple-system,sans-serif;background:#1a1a2e}
 </div>
 
 <script>
-var MBT='${MBT}';
-var VMK='${VMK}';
+var MBT='pk.eyJ1IjoiYmVvZW9hMTIzIiwiYSI6ImNtbjRwY3ZvZDAyaW0ycXB4Y3preDMyZWQifQ.ZlkX1mKNEoRoU4zA-Du07g';
+var VMK='b0196ed21449e7a1466290aba7590b63459a35eacc591d48';
 
 var map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true}).setView([20.844,106.688],15);
 L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/256/{z}/{x}/{y}@2x?access_token='+MBT,{tileSize:256}).addTo(map);
@@ -514,7 +511,7 @@ window.updateMap=function(raw){
     if(d.end){
       var ek=d.end.lat+','+d.end.lng;
       if(!destM)destM=L.marker([d.end.lat,d.end.lng],{icon:mkDest()}).addTo(map);
-      else destM.setLatLng(d.end.lat,d.end.lng);
+      else destM.setLatLng([d.end.lat,d.end.lng]);
       if(lastEndKey!==ek&&dPos){
         lastEndKey=ek;
         drawRoute(dPos[0],dPos[1],d.end.lat,d.end.lng,false);

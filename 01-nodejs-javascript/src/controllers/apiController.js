@@ -62,9 +62,19 @@ const registerUser = async (req, res) => {
 const createOrGetUserDoc = async (req, res) => {
     try {
         const { uid, ...userData } = req.body;
+        console.log(`[API] createOrGetUserDoc hit for UID: ${uid}`);
+        
         const result = await userService.createOrGetUserDoc(uid, userData);
+        
+        if (!result) {
+            console.error(`[API] userService returned NULL for UID: ${uid}`);
+            return res.status(404).json({ error: 'Không thể tạo hoặc lấy dữ liệu người dùng' });
+        }
+
+        console.log(`[API] Returning result focus: ${result.fullname || 'No Name'}`);
         res.json(result);
     } catch (e) {
+        console.error(`[API] get-or-create FATAL:`, e.message);
         res.status(500).json({ error: e.message });
     }
 };

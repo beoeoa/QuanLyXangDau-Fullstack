@@ -1,7 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const TILEMAP_KEY = '71f1014b3a0861668824a95c85ba1523a3098c2b20058f46';
-export const SERVICES_KEY = 'b0195ed21449e7a1466290aba7590b63459a35eacc591d48';
+const TILEMAP_KEY = '71f1014b3a0861668824a95c85ba1523a3098c2b20058f46';
+const SERVICES_KEY = 'b0195ed21449e7a1466290aba7590b63459a35eacc591d48';
+
+// Helper để parse JSON an toàn
+const safeParseJSON = async (res: Response) => {
+  try {
+    const text = await res.text();
+    if (!text) return null;
+    return JSON.parse(text);
+  } catch (e) {
+    console.warn('[Vietmap] Phản hồi không phải JSON:', res.url);
+    return null;
+  }
+};
 
 /**
  * Lấy URL Tile cho Bản đồ Raster Vietmap
@@ -17,7 +29,7 @@ export const getVietmapRoute = async (startLat: number, startLng: number, endLat
   try {
     const url = `https://maps.vietmap.vn/api/route?api-version=1.1&apikey=${SERVICES_KEY}&point=${startLat},${startLng}&point=${endLat},${endLng}&vehicle=car`;
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await safeParseJSON(res);
     if (data && data.paths && data.paths.length > 0) {
       return {
         points: decodePolyline(data.paths[0].points),
@@ -42,7 +54,7 @@ export const searchVietmapAddress = async (text: string, lat?: number, lng?: num
       url += `&focus=${lat},${lng}`;
     }
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await safeParseJSON(res);
     return data || [];
   } catch (error) {
     console.error('Error searching address:', error);

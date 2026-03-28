@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { fetchDeliveryLogs } from '../services/dataService';
 
@@ -24,6 +25,7 @@ export default function AdminLiveMap() {
   const [activeCount, setActiveCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [missingGpsCount, setMissingGpsCount] = useState(0);
+  const [selectedMarker, setSelectedMarker] = useState<MarkerInfo | null>(null);
   const webRef = useRef<WebView>(null);
 
   useEffect(() => {
@@ -40,35 +42,60 @@ export default function AdminLiveMap() {
           const dest = order.items && Array.isArray(order.items) && order.items.length > 0
             ? [...new Set(order.items.map((it: any) => it.destination).filter(Boolean))].join(', ')
             : (order.destination || '');
-          const lastUpdate = toDateSafe(order.updatedAt || order.createdAt);
-          const now = new Date();
-          const isStale = lastUpdate && (now.getTime() - lastUpdate.getTime() > 300000); // 5 mins
-          const hasGps = Boolean(order?.currentLocation?.lat && order?.currentLocation?.lng);
           
+          const coords = order?.currentLocation || { lat: 0, lng: 0 };
+          
+          // Ưu tiên đọc từ currentLocation (Cấu trúc mới bạn vừa sửa ở Backend)
+          let finalLat = coords.lat || (order?.currentLat != null ? parseFloat(order.currentLat) : 0);
+          let finalLng = coords.lng || (order?.currentLng != null ? parseFloat(order.currentLng) : 0);
+          let isLastKnown = false;
+
+          if (!finalLat || !finalLng) {
+            // Thử lấy từ locationHistory (Mảng lịch sử tọa độ)
+            const history = order.locationHistory;
+            if (Array.isArray(history) && history.length > 0) {
+              const last = history[history.length - 1];
+              if (last?.lat && last?.lng) {
+                finalLat = last.lat;
+                finalLng = last.lng;
+                isLastKnown = true;
+              }
+            }
+          }
+
+          const hasGps = Boolean(finalLat && finalLng);
+          
+          // Tính thời gian cập nhật cuối (dùng lastLocationUpdate)
+          const timeField = order.lastLocationUpdate || order.updatedAt || order.createdAt || Date.now();
+          const updatedAt = timeField?._seconds ? new Date(timeField._seconds * 1000) : new Date(timeField);
+          const diffMs = Date.now() - updatedAt.getTime();
+          const diffMin = Math.floor(diffMs / 60000);
+          const isStale = diffMin > 5; // Quá 5 phút coi như mất tín hiệu thực tế
+
           if (!hasGps) {
             missing += 1;
           }
-
-          const coords = hasGps || (order?.currentLocation?.lat && order?.currentLocation?.lng) 
-            ? { lat: order.currentLocation.lat, lng: order.currentLocation.lng } 
-            : { lat: 0, lng: 0 };
 
           const statusMap: Record<string, string> = { moving: 'Đang chạy', received: 'Đã nhận', unloading: 'Đang xả', arrived: 'Đã đến', pending: 'Chờ nhận' };
           const emojiMap: Record<string, string> = { moving: '🚛', unloading: '⛽', arrived: '📍', received: '✅', pending: '📋' };
           const colorMap: Record<string, string> = { moving: '#f39c12', unloading: '#e67e22', arrived: '#9b59b6', received: '#3498db', pending: '#95a5a6' };
           
-          const timeStr = lastUpdate ? lastUpdate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
-
+          const statusLabel = isLastKnown
+            ? `Vị trí cuối (${diffMin}ph trước)` 
+            : (isStale ? `Mất tín hiệu (${diffMin}ph)` : (statusMap[order.status] || 'N/A'));
+          const emoji = isLastKnown ? '📍' : (isStale ? '⚠️' : (emojiMap[order.status] || '📋'));
+          const color = isLastKnown ? '#94a3b8' : (isStale ? '#e67e22' : (colorMap[order.status] || '#95a5a6'));
+          
           results.push({
             id: order.id || `${order.vehiclePlate || ''}-${order.assignedDriverId || ''}`,
-            lat: coords.lat, lng: coords.lng, 
-            hasGps: hasGps && !isStale,
+            lat: finalLat, lng: finalLng, 
+            hasGps: hasGps && !isStale && !isLastKnown,
             plate: (order.vehiclePlate || 'N/A').replace(/'/g, ''),
             driver: (order.assignedDriverName || 'Chưa gán').replace(/'/g, ''),
-            statusLabel: !hasGps ? 'Mất GPS' : (isStale ? `Mất sóng (${timeStr})` : (statusMap[order.status] || 'N/A')),
+            statusLabel,
             dest: dest.replace(/'/g, '').replace(/"/g, ''),
-            emoji: isStale || !hasGps ? '⚠️' : (emojiMap[order.status] || '📋'),
-            color: !hasGps ? '#e74c3c' : (isStale ? '#f1c40f' : (colorMap[order.status] || '#95a5a6')),
+            emoji,
+            color,
             status: order.status || 'pending',
           });
         }
@@ -79,37 +106,35 @@ export default function AdminLiveMap() {
       } catch (e) { console.error('Map error:', e); }
       if (alive) setLoading(false);
     };
-
-    // Helper to parse dates safely
-    const toDateSafe = (v: any): Date | null => {
-      if (!v) return null;
-      if (v instanceof Date) return v;
-      if (v?._seconds) return new Date(v._seconds * 1000);
-      return new Date(v);
-    };
-
     load();
-    const t = setInterval(load, 15000); // refresh 15s
+    const t = setInterval(load, 10000); // refresh 10s
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  // Tính Center
-  const cLat = markers.length > 0 ? markers.reduce((s, m) => s + m.lat, 0) / markers.length : 20.8449;
-  const cLng = markers.length > 0 ? markers.reduce((s, m) => s + m.lng, 0) / markers.length : 106.6297;
-  const zoom = markers.length === 1 ? 14 : markers.length > 1 ? 11 : 9;
+  // Tính Center (Chỉ tính xe có tọa độ thực)
+  const validMarkers = markers.filter(m => m.lat !== 0);
+  const cLat = validMarkers.length > 0 ? validMarkers.reduce((s, m) => s + m.lat, 0) / validMarkers.length : 20.8449;
+  const cLng = validMarkers.length > 0 ? validMarkers.reduce((s, m) => s + m.lng, 0) / validMarkers.length : 106.6297;
+  const zoom = validMarkers.length === 1 ? 14 : validMarkers.length > 1 ? 11 : 9;
 
-  // Render markers (DO NOT filter out missing GPS if they have lat/lng)
+  // Vẽ TẤT CẢ xe có tọa độ (kể cả vị trí cuối đã biết)
   const markersJS = markers.filter(m => m.lat !== 0).map(m => `
     (function(){
       var marker = L.marker([${m.lat}, ${m.lng}], {
-      icon: L.divIcon({ className: 'custom-pin', html: '<div style="font-size:32px; filter:drop-shadow(0px 4px 6px rgba(0,0,0,0.3))">${m.emoji}</div>', iconSize: [40, 40], iconAnchor: [20, 36] })
-      }).addTo(map)
-        .bindPopup('<div style="min-width:180px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif"><b style="font-size:16px;color:#111">${m.emoji} ${m.plate}</b><br/><span style="font-size:14px;color:#444">👤 ${m.driver}</span><br/><br/><span style="font-size:13px;background-color:${m.color}20;color:${m.color};padding:4px 8px;border-radius:12px;font-weight:900;text-transform:uppercase">${m.statusLabel}</span><br/><br/><span style="font-size:13px;color:#555;line-height:1.4">📍 Đến: ${m.dest}</span></div>');
+        icon: L.divIcon({ 
+          className: 'custom-pin', 
+          html: '<div style="font-size:32px; filter:drop-shadow(0px 4px 6px rgba(0,0,0,0.3)); opacity: ${m.hasGps ? 1 : 0.55}">${m.emoji}</div>', 
+          iconSize: [40, 40], 
+          iconAnchor: [20, 36] 
+        })
+      }).addTo(map);
+      marker.on('click', function() {
+        window.ReactNativeWebView.postMessage("${m.id}");
+      });
       window._markers = window._markers || {};
-      window._markers['${m.id}'] = marker;
+      window._markers["${m.id}"] = marker;
     })();
   `).join('\n');
-
 
   // Bản đồ Raster của Google Maps (Giao thông bản địa - Chi tiết + Nhẹ + Ngon nhất trên Mobile WebView)
   // Không dùng Vector WebGL (TrackAsia/MapboxGL) vì Expo Go trên Android thường xuyên bị lỗi trắng GPU Render
@@ -208,6 +233,14 @@ export default function AdminLiveMap() {
         mixedContentMode="always"
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
+        onMessage={(event) => {
+          const id = event.nativeEvent.data;
+          const mk = markers.find(x => x.id === id);
+          if (mk) {
+            setSelectedMarker(mk);
+            webRef.current?.injectJavaScript(`window.focusMarker && window.focusMarker('${mk.id}'); true;`);
+          }
+        }}
       />
       <View style={styles.fleetList}>
         <View style={styles.fleetHeader}>
@@ -219,6 +252,7 @@ export default function AdminLiveMap() {
             <TouchableOpacity
               key={m.id}
               onPress={() => {
+                setSelectedMarker(m);
                 webRef.current?.injectJavaScript(`window.focusMarker && window.focusMarker('${m.id}'); true;`);
               }}
               style={[styles.fleetCard, { borderColor: m.color }]}
@@ -231,6 +265,58 @@ export default function AdminLiveMap() {
           ))}
         </ScrollView>
       </View>
+
+      {selectedMarker && (
+        <Modal visible transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalPlate}>{selectedMarker.emoji} {selectedMarker.plate}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: selectedMarker.color + '20' }]}>
+                    <Text style={{ color: selectedMarker.color, fontWeight: '800', fontSize: 12 }}>{selectedMarker.statusLabel}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => setSelectedMarker(null)} style={{ padding: 5 }}>
+                  <Ionicons name="close" size={24} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalInfoRow}>
+                <Ionicons name="person" size={18} color="#0070f3" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.modalInfoLabel}>Tài xế phụ trách</Text>
+                  <Text style={styles.modalInfoValue}>{selectedMarker.driver}</Text>
+                </View>
+              </View>
+
+              <View style={styles.modalInfoRow}>
+                <Ionicons name="location" size={18} color="#e67e22" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.modalInfoLabel}>Đích đến / Khách hàng</Text>
+                  <Text style={styles.modalInfoValue}>{selectedMarker.dest || 'Chưa rõ'}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.modalInfoRow, { borderBottomWidth: 0 }]}>
+                <Ionicons name="map" size={18} color="#52c41a" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.modalInfoLabel}>Tọa độ GPS Live</Text>
+                  {selectedMarker.lat ? (
+                    <Text style={styles.modalInfoValue}>{selectedMarker.lat.toFixed(5)}, {selectedMarker.lng.toFixed(5)}</Text>
+                  ) : (
+                    <Text style={[styles.modalInfoValue, { color: '#e74c3c' }]}>Chưa có tọa độ</Text>
+                  )}
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedMarker(null)}>
+                <Text style={styles.closeBtnText}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -252,4 +338,15 @@ const styles = StyleSheet.create({
   fleetPlate: { fontWeight: '900', color: '#0f172a' },
   fleetStatus: { fontWeight: '900', marginTop: 4 },
   fleetDriver: { marginTop: 6, color: '#334155', fontSize: 12, fontWeight: '600' },
+  // Modal Style
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalCard: { backgroundColor: '#fff', borderRadius: 20, width: '100%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  modalPlate: { fontSize: 22, fontWeight: '900', color: '#0f172a' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 6, alignSelf: 'flex-start' },
+  modalInfoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  modalInfoLabel: { fontSize: 12, color: '#64748b', fontWeight: '600' },
+  modalInfoValue: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginTop: 2 },
+  closeBtn: { backgroundColor: '#f1f5f9', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
+  closeBtnText: { fontSize: 15, fontWeight: '700', color: '#475569' },
 });

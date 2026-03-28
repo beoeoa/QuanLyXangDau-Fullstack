@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TextInput, 
-  TouchableOpacity, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +19,7 @@ import { useAuthStore } from '../store/authStore';
 export default function LoginScreen() {
   const router = useRouter();
   const setLogin = useAuthStore((state) => state.login);
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -54,12 +54,16 @@ export default function LoginScreen() {
       });
 
       Alert.alert('Thành công', result.message);
-      
-      // Chuyển hướng theo Role (Routing mới)
+
+      // Chặn các role không phải admin/driver trên mobile
       if (result.role === 'admin') {
         router.replace('/(admin)');
-      } else {
+      } else if (result.role === 'driver') {
         router.replace('/(driver)');
+      } else {
+        setIsLoading(false);
+        Alert.alert('Thất bại', 'Vui lòng sử dụng Web cho vai trò của bạn.');
+        return;
       }
     } else {
       Alert.alert('Đăng nhập thất bại', result.message);
@@ -88,12 +92,12 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        
+
         <View style={styles.headerContainer}>
           <Text style={styles.title}>Đăng Nhập</Text>
           <Text style={styles.subtitle}>Chào mừng bạn quay lại hệ thống</Text>
@@ -101,13 +105,34 @@ export default function LoginScreen() {
 
         {/* Form Đăng Nhập */}
         <View style={styles.formContainer}>
-          
-          <SocialAuthButtons 
-            onAuthSuccess={() => {}} 
-            onError={handleSocialError} 
-            disabled={isLoading} 
+
+          <SocialAuthButtons
+            onAuthSuccess={async (result) => {
+              if (result.success) {
+                // Xử lý giống hệt login Email thành công
+                if (!result.isApproved && result.role !== 'admin') {
+                  Alert.alert('Thông báo', 'Tài khoản của bạn đang chờ Admin duyệt.');
+                  return;
+                }
+                
+                await setLogin({
+                  userId: result.userId,
+                  email: result.email,
+                  name: result.name,
+                  role: result.role,
+                  isApproved: result.isApproved,
+                });
+
+                if (result.role === 'admin') router.replace('/(admin)');
+                else if (result.role === 'driver') router.replace('/(driver)');
+              } else {
+                Alert.alert('Thất bại', result.message);
+              }
+            }}
+            onError={handleSocialError}
+            disabled={isLoading}
           />
-          
+
           <View style={styles.dividerContainer}>
             <View style={styles.divider} />
             <Text style={styles.dividerText}>hoặc đăng nhập bằng email</Text>
@@ -137,8 +162,8 @@ export default function LoginScreen() {
             <Text style={styles.forgotPassText}>Quên mật khẩu?</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.btnSubmit, isLoading && styles.btnDisabled]} 
+          <TouchableOpacity
+            style={[styles.btnSubmit, isLoading && styles.btnDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
           >

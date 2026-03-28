@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '../store/authStore';
+import { registerForPushNotificationsAsync } from '../services/notificationService';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -20,6 +21,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!isHydrated) return;
+
+    // Đăng ký Push Token khi đã có User
+    if (user) {
+      registerForPushNotificationsAsync(user.userId);
+    }
 
     const inAuthGroup = segments[0] === 'login' || segments[0] === 'register';
 
