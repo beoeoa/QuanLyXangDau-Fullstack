@@ -62,21 +62,25 @@ const registerUser = async (req, res) => {
 const createOrGetUserDoc = async (req, res) => {
     try {
         const { uid, ...userData } = req.body;
-        console.log(`[API] createOrGetUserDoc hit for UID: ${uid}`);
+        console.log(`[API] get-or-create hit for UID: ${uid || 'UNDEFINED'}`);
         
+        if (!uid) {
+            console.error("[API] Error: Missing UID in request body");
+            return res.status(400).json({ success: false, message: 'Thiếu UID người dùng' });
+        }
+
         const result = await userService.createOrGetUserDoc(uid, userData);
         
         if (!result) {
             console.error(`[API] userService returned NULL for UID: ${uid}`);
-            return res.status(404).json({ error: 'Không thể tạo hoặc lấy dữ liệu người dùng' });
+            return res.status(404).json({ success: false, message: 'User not found or created' });
         }
 
-        console.log(`[API] Returning result focus: ${result.fullname || 'No Name'}, isNew: ${result.isNewUser}`);
-        // Ensure result is a plain object and not undefined
-        return res.status(200).json(result || { success: false, message: 'No data returned' });
+        console.log(`[API] Found/Created User: ${result.fullname || 'No Name'}, Role: ${result.role}`);
+        return res.status(200).json(result);
     } catch (e) {
         console.error(`[API] get-or-create FATAL:`, e.message);
-        return res.status(500).json({ error: e.message });
+        return res.status(500).json({ success: false, error: e.message });
     }
 };
 
