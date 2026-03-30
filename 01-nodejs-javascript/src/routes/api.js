@@ -42,7 +42,7 @@ const {
     // Fuel Price Sync
     syncFuelPricesCtrl, getSyncMetaCtrl,
     // Shipments
-    getShipmentsCtrl, createShipmentCtrl, updateShipmentCtrl, deleteShipmentCtrl, getShipmentsByDriverCtrl, getGovWarehousesCtrl,
+    getShipmentsCtrl, createShipmentCtrl, updateShipmentCtrl, deleteShipmentCtrl, getShipmentsByDriverCtrl, getGovWarehousesCtrl, getAIDispatchSuggestionsCtrl,
     // Driver Schedules
     getDriverSchedulesCtrl, addDriverScheduleCtrl, updateDriverScheduleCtrl, deleteDriverScheduleCtrl, getSchedulesByDriverCtrl,
     // Driver Trip Stats (Automated)
