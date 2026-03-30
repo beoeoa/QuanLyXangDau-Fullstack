@@ -139,7 +139,7 @@ function DriverScheduleManager() {
         const warningList = stats.filter(s => !s.activeTrip && (s.idleSinceMs > 172800000 || !s.lastCompleted)).sort((a, b) => (b.idleSinceMs || Infinity) - (a.idleSinceMs || Infinity));
         const topList = [...stats].filter(s => s.monthTripCount > 0).sort((a, b) => b.monthTripCount - a.monthTripCount).slice(0, 5);
 
-        return { processedTrips: allProcessedTrips, driverStats: stats, activeDrivers: activeList, warningDrivers: warningList, topList };
+        return { processedTrips: allProcessedTrips, driverStats: stats, activeDrivers: activeList, warningDrivers: warningList, topDrivers: topList };
     }, [allOrders, drivers, selectedMonth]);
 
     // LỌC BẢNG NHẬT KÝ
@@ -239,8 +239,8 @@ function DriverScheduleManager() {
                                 🔥 Năng suất tháng {selectedMonth.split('-')[1] || selectedMonth}
                             </div>
                             <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
-                                {topList.length === 0 ? <div style={{ color: '#999', fontSize: 13 }}>Chưa có ai hoàn thành chuyến nào.</div> :
-                                    topList.map((d, i) => (
+                                {topDrivers.length === 0 ? <div style={{ color: '#999', fontSize: 13 }}>Chưa có ai hoàn thành chuyến nào.</div> :
+                                    topDrivers.map((d, i) => (
                                         <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f4fbf6', padding: '10px', borderRadius: '6px', borderLeft: `3px solid ${i === 0 ? '#f1c40f' : '#2ecc71'}` }}>
                                             <div>
                                                 <div style={{ fontWeight: 'bold', fontSize: 14 }}>{i+1}. {d.name}</div>
