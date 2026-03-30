@@ -339,8 +339,8 @@ body{margin:0;padding:0;font-family:-apple-system,sans-serif;background:#1a1a2e}
 </div>
 
 <script>
-var MBT='${process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || ''}';
-var VMK='${process.env.EXPO_PUBLIC_VIETMAP_API_KEY || ''}';
+var MBT='pk.eyJ1IjoiYmVvZW9hMTIzIiwiYSI6ImNtbjRwY3ZvZDAyaW0ycXB4Y3preDMyZWQifQ.ZlkX1mKNEoRoU4zA-Du07g';
+var VMK='b0196ed21449e7a1466290aba7590b63459a35eacc591d48';
 
 var map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true}).setView([20.844,106.688],15);
 L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/256/{z}/{x}/{y}@2x?access_token='+MBT,{tileSize:256}).addTo(map);
