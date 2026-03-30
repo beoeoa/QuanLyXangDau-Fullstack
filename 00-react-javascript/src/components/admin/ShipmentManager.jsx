@@ -25,6 +25,9 @@ function ShipmentManager({ vehicles = [], drivers = [] }) {
         status: 'pending', notes: '', deliveredQuantity: ''
     })
 
+    const [aiSuggestions, setAiSuggestions] = useState(null)
+    const [loadingAI, setLoadingAI] = useState(false)
+
     const load = async () => {
         setLoading(true)
         const [data, wh] = await Promise.all([getAllShipments(), getGovWarehouses()])
@@ -33,11 +36,28 @@ function ShipmentManager({ vehicles = [], drivers = [] }) {
         setLoading(false)
     }
 
+    const fetchAISuggestions = async () => {
+        if (!form.quantity) {
+            alert('Vui lòng nhập Số lượng xuất (Lít) trước khi dùng AI!');
+            return;
+        }
+        setLoadingAI(true);
+        import('../../services/shipmentService').then(async (mod) => {
+            const data = await mod.getAIDispatchSuggestions(form.quantity, form.destination || '');
+            setAiSuggestions(data);
+            setLoadingAI(false);
+        }).catch(() => {
+            alert('Có lỗi tải thư viện AI');
+            setLoadingAI(false);
+        })
+    }
+
     useEffect(() => { load() }, [])
 
     const resetForm = () => {
         setForm({ sourceWarehouse: '', product: '', quantity: '', sealCode: '', vehiclePlate: '', driverName: '', driverId: '', destination: '', status: 'pending', notes: '', deliveredQuantity: '' })
         setEditing(null)
+        setAiSuggestions(null)
     }
 
     const handleSubmit = async (e) => {
@@ -54,7 +74,7 @@ function ShipmentManager({ vehicles = [], drivers = [] }) {
             driverId: s.driverId || '', destination: s.destination || '', status: s.status || 'pending',
             notes: s.notes || '', deliveredQuantity: s.deliveredQuantity || ''
         })
-        setEditing(s.id); setShowForm(true)
+        setEditing(s.id); setShowForm(true); setAiSuggestions(null)
     }
 
     const handleDelete = async (id) => {
@@ -131,6 +151,40 @@ function ShipmentManager({ vehicles = [], drivers = [] }) {
                             <label>Số Seal niêm phong</label>
                             <input value={form.sealCode} onChange={e => setForm({ ...form, sealCode: e.target.value })} placeholder="VD: SEAL-2024-0892" />
                         </div>
+                        
+                        {/* AI DISPATCHING WIDGET */}
+                        <div style={{ gridColumn: '1 / -1', background: '#e1f5fe', padding: 12, borderRadius: 8, marginTop: 8, marginBottom: 8, border: '1px solid #81d4fa' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong style={{ color: '#0277bd', fontSize: 14 }}>🤖 Hệ thống Gợi ý Điều Phối (AI Dispatching)</strong>
+                                <button type="button" onClick={fetchAISuggestions} disabled={loadingAI} style={{ background: '#0288d1', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>
+                                    {loadingAI ? 'Đang phân tích...' : '✨ Tìm Xe & Tài xế Tối ưu'}
+                                </button>
+                            </div>
+                            {aiSuggestions && aiSuggestions.length > 0 && (
+                                <div style={{ marginTop: 12 }}>
+                                    {aiSuggestions.map((sg, idx) => (
+                                        <div key={idx} style={{ background: '#fff', padding: 8, borderRadius: 6, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                                            <div>
+                                                <div style={{ fontSize: 14 }}><strong>Tài xế:</strong> {sg.driverName} | <strong>Xe:</strong> {sg.vehiclePlate} ({sg.vehicleCapacity}L)</div>
+                                                <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>💡 Lý do: {sg.reason}</div>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 12, fontWeight: 'bold' }}>Điểm: {sg.score}</span>
+                                                <button type="button" onClick={() => {
+                                                    const d = drivers.find(dr => dr.id === sg.driverId);
+                                                    setForm({ ...form, vehiclePlate: sg.vehiclePlate, driverId: sg.driverId, driverName: d?.name || sg.driverName });
+                                                    setAiSuggestions(null);
+                                                }} style={{ background: '#f39c12', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>Áp dụng</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {aiSuggestions && aiSuggestions.length === 0 && (
+                                <div style={{ marginTop: 12, color: '#c0392b', fontSize: 13, fontWeight: 'bold' }}>Không tìm thấy Xe / Tài xế nào đang rảnh đủ tải trọng!</div>
+                            )}
+                        </div>
+
                         <div className="form-group">
                             <label>Biển số xe bồn *</label>
                             <select required value={form.vehiclePlate} onChange={e => setForm({ ...form, vehiclePlate: e.target.value })}>

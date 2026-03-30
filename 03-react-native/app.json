@@ -36,6 +36,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.quanlyxangdau.app",
+      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBKpmlQ8f4VkkyzGftw7a0Qy_z11fkXe-8"

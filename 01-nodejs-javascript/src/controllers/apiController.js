@@ -772,6 +772,16 @@ const getShipmentsByDriverCtrl = async (req, res) => {
 const getGovWarehousesCtrl = async (req, res) => {
     res.json(shipmentService.GOV_WAREHOUSES);
 };
+const getAIDispatchSuggestionsCtrl = async (req, res) => {
+    try {
+        const quantity = Number(req.query.quantity) || 0;
+        const destination = req.query.destination || '';
+        const suggestions = await shipmentService.getAIDispatchSuggestions(quantity, destination);
+        res.json(suggestions);
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
 
 // ===========================
 // DRIVER SCHEDULES (Nhật ký làm việc tài xế)
@@ -868,7 +878,7 @@ module.exports = {
     // Fuel Price Sync
     syncFuelPricesCtrl, getSyncMetaCtrl,
     // Shipments
-    getShipmentsCtrl, createShipmentCtrl, updateShipmentCtrl, deleteShipmentCtrl, getShipmentsByDriverCtrl, getGovWarehousesCtrl,
+    getShipmentsCtrl, createShipmentCtrl, updateShipmentCtrl, deleteShipmentCtrl, getShipmentsByDriverCtrl, getGovWarehousesCtrl, getAIDispatchSuggestionsCtrl,
     // Driver Schedules
     getDriverSchedulesCtrl, addDriverScheduleCtrl, updateDriverScheduleCtrl, deleteDriverScheduleCtrl, getSchedulesByDriverCtrl,
     // Routes

@@ -193,6 +193,7 @@ routerAPI.put('/shipments/:id', updateShipmentCtrl);
 routerAPI.delete('/shipments/:id', deleteShipmentCtrl);
 routerAPI.get('/shipments/driver/:driverId', getShipmentsByDriverCtrl);
 routerAPI.get('/shipments/warehouses', getGovWarehousesCtrl);
+routerAPI.get('/shipments/ai-dispatch', getAIDispatchSuggestionsCtrl);
 
 // ===========================
 // DRIVER SCHEDULES (Nhật ký làm việc tài xế)

@@ -1,5 +1,6 @@
-﻿import API_BASE from './apiConfig';
+import API_BASE from './apiConfig';
 const API_URL = API_BASE;
+
 export const getAllShipments = async () => {
     try {
         const res = await fetch(`${API_URL}/shipments`);
@@ -41,3 +42,9 @@ export const getGovWarehouses = async () => {
     } catch (error) { return []; }
 };
 
+export const getAIDispatchSuggestions = async (quantity, destination) => {
+    try {
+        const res = await fetch(`${API_URL}/shipments/ai-dispatch?quantity=${quantity}&destination=${encodeURIComponent(destination)}`);
+        return await res.json();
+    } catch (error) { return []; }
+};
