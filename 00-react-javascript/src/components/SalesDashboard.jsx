@@ -67,6 +67,28 @@ function SalesDashboard({ user, onLogout }) {
     const [showDispatchForm, setShowDispatchForm] = useState(false)
     const [dispatchForm, setDispatchForm] = useState({ orderId: '', vehiclePlate: '', assignedDriverId: '', assignedDriverName: '', sourceWarehouse: '', items: [{ product: '', amount: '', compartment: '', destination: '' }] })
 
+    const [aiSuggestions, setAiSuggestions] = useState(null)
+    const [loadingAI, setLoadingAI] = useState(false)
+
+    const fetchAISuggestions = async () => {
+        const totalLit = (dispatchForm.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+        if (totalLit <= 0) {
+            alert('Vui lòng nhập hàng hóa và Số Lít cần xuất bên dưới trước khi dùng AI!');
+            return;
+        }
+        setLoadingAI(true);
+        import('../services/shipmentService').then(async (mod) => {
+            const dests = dispatchForm.items.map(i => i.destination).filter(Boolean).join(' | ');
+            const data = await mod.getAIDispatchSuggestions(totalLit, dests);
+            setAiSuggestions(data);
+            setLoadingAI(false);
+        }).catch((e) => {
+            console.error('Error loading AI:', e);
+            alert('Có lỗi tải thư viện AI');
+            setLoadingAI(false);
+        })
+    }
+
     useEffect(() => {
         const check = async () => {
             const result = await verifyUserRole(user.userId, 'sales')
@@ -1034,7 +1056,42 @@ function SalesDashboard({ user, onLogout }) {
 
                 {showDispatchForm && (
                     <form onSubmit={handleDispatch} style={{ background: '#f9f9f9', padding: 20, borderRadius: 8 }}>
-                        <h4 style={{ marginTop: 0 }}>Ghép đơn → Xe → Tài xế</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+                            <h4 style={{ margin: 0 }}>Ghép đơn → Xe → Tài xế</h4>
+                            
+                            <button type="button" onClick={fetchAISuggestions} disabled={loadingAI} style={{ background: '#0288d1', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 'bold', fontSize: 13, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                {loadingAI ? 'Đang phân tích...' : '🤖 AI Gợi ý Điều Phối Nhanh'}
+                            </button>
+                        </div>
+
+                        {aiSuggestions && (
+                            <div style={{ background: '#e1f5fe', padding: 16, borderRadius: 8, marginBottom: 16, border: '1px solid #81d4fa' }}>
+                                <strong style={{ color: '#0277bd', fontSize: 14 }}>Kết quả Gợi ý AI (Top 3)</strong>
+                                {aiSuggestions.length > 0 ? (
+                                    <div style={{ marginTop: 12 }}>
+                                        {aiSuggestions.map((sg, idx) => (
+                                            <div key={idx} style={{ background: '#fff', padding: '10px 12px', borderRadius: 6, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                                                <div>
+                                                    <div style={{ fontSize: 14 }}><strong>Tài xế:</strong> {sg.driverName} | <strong>Xe:</strong> {sg.vehiclePlate} ({sg.vehicleCapacity}L)</div>
+                                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>💡 Lý do: {sg.reason}</div>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                    <span style={{ background: '#4caf50', color: 'white', padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 'bold' }}>Điểm: {sg.score}</span>
+                                                    <button type="button" onClick={() => {
+                                                        const d = drivers.find(dr => dr.id === sg.driverId);
+                                                        setDispatchForm({ ...dispatchForm, vehiclePlate: sg.vehiclePlate, assignedDriverId: sg.driverId, assignedDriverName: d?.fullname || sg.driverName });
+                                                        setAiSuggestions(null);
+                                                    }} style={{ background: '#f39c12', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>Áp dụng</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div style={{ marginTop: 12, color: '#c0392b', fontSize: 13, fontWeight: 'bold' }}>Không tìm thấy Xe / Tài xế đáp ứng!</div>
+                                )}
+                            </div>
+                        )}
+
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div>
                                 <label style={{ fontWeight: 'bold', fontSize: 13 }}>Kho xuất hàng *</label>
