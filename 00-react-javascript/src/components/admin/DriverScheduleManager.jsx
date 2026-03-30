@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { getAllAutomatedDriverTripStats } from '../../services/driverScheduleService';
+import { useState, useEffect, useMemo } from 'react';
+import { getAllDeliveryOrders } from '../../services/transportationService';
 import { getUsersByRole } from '../../services/userService';
 import './AdminModules.css';
 
 function DriverScheduleManager() {
-    const [trips, setTrips] = useState([]);
+    const [allOrders, setAllOrders] = useState([]);
     const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -20,11 +20,11 @@ function DriverScheduleManager() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [tripData, driverData] = await Promise.all([
-                getAllAutomatedDriverTripStats(),
+            const [orderData, driverData] = await Promise.all([
+                getAllDeliveryOrders(),
                 getUsersByRole('driver')
             ]);
-            setTrips(Array.isArray(tripData) ? tripData : []);
+            setAllOrders(Array.isArray(orderData) ? orderData : []);
             setDrivers(Array.isArray(driverData) ? driverData : []);
         } catch (error) {
             console.error("Lỗi tải dữ liệu:", error);
@@ -32,15 +32,114 @@ function DriverScheduleManager() {
         setLoading(false);
     };
 
-    const filteredTrips = trips.filter(t => {
+    // Helper tính khoàng thời gian
+    const formatDuration = (ms) => {
+        if (!ms || ms < 0) return '-';
+        const hours = Math.floor(ms / (1000 * 60 * 60));
+        const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        if (hours > 24) {
+            const days = Math.floor(hours / 24);
+            const remainH = hours % 24;
+            return `${days} ngày ${remainH}g`;
+        }
+        if (hours > 0) return `${hours}g ${minutes}p`;
+        return `${minutes} phút`;
+    };
+
+    // XỬ LÝ DỮ LIỆU ĐỂ TÍNH TOÁN (Dùng useMemo để không lag)
+    const { processedTrips, driverStats, activeDrivers, warningDrivers, topDrivers } = useMemo(() => {
+        const now = new Date();
+        const tripsByDriver = {};
+        
+        // Nhóm các lệnh theo từng tài xế & Lọc trip hợp lệ
+        const validOrders = allOrders.filter(o => o.assignedDriverId).map(o => {
+            const tStart = new Date(o.createdAt?._seconds ? o.createdAt._seconds * 1000 : o.createdAt || 0);
+            const tEnd = (o.status === 'completed' || o.status === 'cancelled') 
+                       ? new Date(o.updatedAt?._seconds ? o.updatedAt._seconds * 1000 : o.updatedAt || 0)
+                       : null;
+            return { ...o, tStart, tEnd };
+        }).sort((a, b) => a.tStart - b.tStart); // Sort tăng dần thời gian nhận lệnh
+
+        // Map danh sách chuyến cho từng tài xế để tính khoảng nghĩ (interval)
+        validOrders.forEach(o => {
+            if (!tripsByDriver[o.assignedDriverId]) tripsByDriver[o.assignedDriverId] = [];
+            const driverTrips = tripsByDriver[o.assignedDriverId];
+            
+            // Tìm chuyến liền trước (đã hoàn thành)
+            let lastTripInfo = null;
+            if (driverTrips.length > 0) {
+                const prev = driverTrips[driverTrips.length - 1];
+                if (prev.tEnd) {
+                    const idleMs = o.tStart - prev.tEnd;
+                    lastTripInfo = idleMs > 0 ? idleMs : null;
+                }
+            }
+
+            // Thời lượng chuyến
+            const durationMs = o.tEnd ? (o.tEnd - o.tStart) : null;
+
+            const extendedOrder = {
+                ...o,
+                durationMs,
+                idleBeforeMs: lastTripInfo
+            };
+            driverTrips.push(extendedOrder);
+        });
+
+        // Duỗi array trips
+        const allProcessedTrips = Object.values(tripsByDriver).flat().sort((a, b) => (b.tEnd || b.tStart) - (a.tEnd || a.tStart));
+
+        // TÍNH TOÁN STATUS TÀI XẾ
+        const stats = drivers.map(d => {
+            const dTrips = tripsByDriver[d.id] || [];
+            
+            // Chuyến đang chạy
+            const activeTrip = dTrips.find(t => t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'new');
+            
+            // Chuyến đã hoàn thành tháng này
+            const monthTrips = dTrips.filter(t => {
+                if (t.status !== 'completed') return false;
+                const ds = t.updatedAt || t.createdAt || '';
+                const dateStr = typeof ds === 'string' ? ds : new Date(t.tEnd).toISOString();
+                return dateStr.startsWith(selectedMonth);
+            });
+
+            // Tìm chuyến hoàn thành cuối cùng
+            const completedTrips = dTrips.filter(t => t.status === 'completed').sort((a, b) => b.tEnd - a.tEnd);
+            const lastCompleted = completedTrips[0];
+            
+            let idleSinceMs = null;
+            if (!activeTrip && lastCompleted) {
+                idleSinceMs = now - lastCompleted.tEnd;
+            }
+
+            return {
+                id: d.id,
+                name: d.fullname || d.email,
+                activeTrip,
+                monthTripCount: monthTrips.length,
+                lastCompleted,
+                idleSinceMs,
+            };
+        });
+
+        const activeList = stats.filter(s => s.activeTrip);
+        // Cảnh báo nếu idle > 2 ngày (172800000 ms) hoặc chưa có chuyến nào
+        const warningList = stats.filter(s => !s.activeTrip && (s.idleSinceMs > 172800000 || !s.lastCompleted)).sort((a, b) => (b.idleSinceMs || Infinity) - (a.idleSinceMs || Infinity));
+        const topList = [...stats].filter(s => s.monthTripCount > 0).sort((a, b) => b.monthTripCount - a.monthTripCount).slice(0, 5);
+
+        return { processedTrips: allProcessedTrips, driverStats: stats, activeDrivers: activeList, warningDrivers: warningList, topDrivers: topList };
+    }, [allOrders, drivers, selectedMonth]);
+
+    // LỌC BẢNG NHẬT KÝ
+    const filteredAndSortedTrips = processedTrips.filter(t => {
         const term = searchTerm.toLowerCase();
         const matchSearch = !term ||
             (t.assignedDriverName || '').toLowerCase().includes(term) ||
             (t.vehiclePlate || '').toLowerCase().includes(term);
 
-        // Lấy ngày của chuyến (ưu tiên completedAt, rồi updatedAt, rồi createdAt)
-        const tripDateStr = t.completedAt || t.updatedAt || t.createdAt || '';
-        const tripDate = tripDateStr ? tripDateStr.substring(0, 10) : '';
+        const tripDateObj = t.tEnd || t.tStart;
+        const tripDate = tripDateObj ? new Date(tripDateObj).toISOString().substring(0, 10) : '';
 
         let matchDate = true;
         if (dateFrom && dateTo) {
@@ -56,165 +155,180 @@ function DriverScheduleManager() {
         return matchSearch && matchDate;
     });
 
-    const sortedTrips = [...filteredTrips].sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.createdAt || 0);
-        const dateB = new Date(b.updatedAt || b.createdAt || 0);
-        return dateB - dateA;
-    });
-
-    // Bảng xếp hạng theo tháng đang chọn
-    const driverStats = drivers.map(d => {
-        const monthTrips = trips.filter(t => {
-            if (t.assignedDriverId !== d.id) return false;
-            const ds = t.completedAt || t.updatedAt || t.createdAt || '';
-            return ds.startsWith(selectedMonth);
-        });
-        return { id: d.id, name: d.fullname || d.email, monthTrips: monthTrips.length };
-    }).sort((a, b) => b.monthTrips - a.monthTrips);
-
-    // Tổng chuyến của tháng đang chọn
-    const totalTripsThisMonth = trips.filter(t => {
-        const ds = t.completedAt || t.updatedAt || t.createdAt || '';
-        return ds.startsWith(selectedMonth);
-    }).length;
-
     const clearFilters = () => {
-        setSearchTerm('');
-        setDateFrom('');
-        setDateTo('');
+        setSearchTerm(''); setDateFrom(''); setDateTo('');
         const now = new Date();
         setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
     };
 
     return (
-        <div className="module-container">
-            <div className="module-header">
-                <h2>🗓️ Nhật ký làm việc tài xế (Tự động)</h2>
+        <div className="module-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0 }}>🚦 Trung Tâm Giám Sát Lái Xe Toàn Diện</h2>
                 <button className="btn-primary" onClick={loadData}>🔄 Làm mới dữ liệu</button>
             </div>
 
-            {/* Thẻ tổng chuyến tháng */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-                <div style={{ background: '#eaf2f8', padding: '14px 18px', borderRadius: '8px', borderLeft: '4px solid #3498db' }}>
-                    <div style={{ fontSize: '13px', color: '#666' }}>🚚 Tổng chuyến trong tháng</div>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#2980b9' }}>{totalTripsThisMonth}</div>
-                </div>
-                <div style={{ background: '#eafaf1', padding: '14px 18px', borderRadius: '8px', borderLeft: '4px solid #27ae60' }}>
-                    <div style={{ fontSize: '13px', color: '#666' }}>👨‍✈️ Tài xế có chuyến</div>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#27ae60' }}>{driverStats.filter(d => d.monthTrips > 0).length}</div>
-                </div>
-                <div style={{ background: '#fef9e7', padding: '14px 18px', borderRadius: '8px', borderLeft: '4px solid #f39c12' }}>
-                    <div style={{ fontSize: '13px', color: '#666' }}>📋 Số chuyến lọc ra</div>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#e67e22' }}>{filteredTrips.length}</div>
-                </div>
-            </div>
-
-            {/* Bảng xếp hạng */}
-            <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '12px', border: '1px solid #e9ecef', marginBottom: '20px' }}>
-                <h3 style={{ marginTop: 0 }}>🏆 Bảng xếp hạng tháng {selectedMonth}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
-                    {driverStats.slice(0, 4).map((ds, idx) => (
-                        <div key={ds.id} style={{
-                            background: 'white', padding: '15px', borderRadius: '8px',
-                            borderLeft: `5px solid ${['#ffc107', '#6c757d', '#cd7f32', '#007bff'][idx] || '#ddd'}`
-                        }}>
-                            <div style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>HẠNG {idx + 1}</div>
-                            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{ds.name}</div>
-                            <div style={{ fontSize: '20px', color: '#28a745', marginTop: '5px' }}>{ds.monthTrips} chuyến</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Bộ lọc nâng cao */}
-            <div style={{ background: 'white', padding: '15px', borderRadius: '8px', marginBottom: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {/* Tìm kiếm */}
-                    <input
-                        type="text"
-                        placeholder="🔍 Tìm tên tài xế hoặc biển số xe..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        style={{ flex: '2', minWidth: '200px', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }}
-                    />
-
-                    {/* Lọc theo tháng */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>📅 Tháng:</label>
-                        <input
-                            type="month"
-                            value={selectedMonth}
-                            onChange={e => { setSelectedMonth(e.target.value); setDateFrom(''); setDateTo(''); }}
-                            style={{ padding: '7px', border: '1px solid #ddd', borderRadius: '6px' }}
-                        />
-                    </div>
-
-                    {/* Lọc theo khoảng ngày cụ thể */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Từ ngày:</label>
-                        <input
-                            type="date"
-                            value={dateFrom}
-                            onChange={e => { setDateFrom(e.target.value); setSelectedMonth(''); }}
-                            style={{ padding: '7px', border: '1px solid #ddd', borderRadius: '6px' }}
-                        />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Đến ngày:</label>
-                        <input
-                            type="date"
-                            value={dateTo}
-                            onChange={e => { setDateTo(e.target.value); setSelectedMonth(''); }}
-                            style={{ padding: '7px', border: '1px solid #ddd', borderRadius: '6px' }}
-                        />
-                    </div>
-
-                    <button onClick={clearFilters} style={{ padding: '8px 14px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                        ✕ Xóa lọc
-                    </button>
-                </div>
-            </div>
-
             {loading ? (
-                <div className="loading-state">Đang tải dữ liệu...</div>
-            ) : sortedTrips.length === 0 ? (
-                <div className="empty-state">Chưa có dữ liệu nhật ký làm việc từ Lệnh điều động.</div>
+                <div className="loading-state">Đang phân tích dữ liệu...</div>
             ) : (
-                <div className="table-container">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th>Thời gian hoàn thành</th>
-                                <th>Tài Xế</th>
-                                <th>Xe bồn</th>
-                                <th>Điểm nhận hàng</th>
-                                <th>Điểm giao hàng</th>
-                                <th>Sản phẩm</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sortedTrips.map(trip => {
-                                const dt = new Date(trip.updatedAt || trip.createdAt);
-                                return (
-                                    <tr key={trip.id}>
-                                        <td><strong>{dt.toLocaleString('vi-VN')}</strong></td>
-                                        <td>{trip.assignedDriverName}</td>
-                                        <td>{trip.vehiclePlate}</td>
-                                        <td>{trip.sourceWarehouse || 'Kho tổng'}</td>
-                                        <td>{trip.destination}</td>
-                                        <td>{trip.product} ({Number(trip.amount).toLocaleString()}L)</td>
-                                        <td>
-                                            <span style={{ background: '#d4edda', color: '#155724', padding: '4px 8px', borderRadius: '12px', fontWeight: 'bold', fontSize: '12px' }}>
-                                                ✅ Đã hoàn thành
-                                            </span>
-                                        </td>
+                <>
+                    {/* BẢNG PHÂN CỰC HOẠT ĐỘNG */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                        
+                        {/* CỘT 1: ĐANG BẬN */}
+                        <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e0e0e0', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                            <div style={{ background: '#3498db', color: 'white', padding: '12px 15px', fontWeight: 'bold' }}>
+                                🚚 Đang Vận Hành ({activeDrivers.length})
+                            </div>
+                            <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
+                                {activeDrivers.length === 0 ? <div style={{ color: '#999', fontSize: 13 }}>Không có xe nào đang chạy.</div> : 
+                                    activeDrivers.map(d => (
+                                        <div key={d.id} style={{ background: '#f5f9fc', padding: '10px', borderRadius: '6px', borderLeft: '3px solid #3498db' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: 14 }}>{d.name}</div>
+                                            <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>📌 Đi: {d.activeTrip.destination}</div>
+                                            <div style={{ fontSize: 12, color: '#f39c12', fontWeight: 'bold' }}>Trạng thái: {d.activeTrip.status}</div>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                        </div>
+
+                        {/* CỘT 2: CẢNH BÁO LƯỜI / TRỐNG LỊCH */}
+                        <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e0e0e0', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                            <div style={{ background: '#e74c3c', color: 'white', padding: '12px 15px', fontWeight: 'bold' }}>
+                                🔴 Cảnh báo Trống lịch / Lâu không đi ({warningDrivers.length})
+                            </div>
+                            <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
+                                {warningDrivers.length === 0 ? <div style={{ color: '#27ae60', fontSize: 13, fontWeight: 'bold' }}>Quá tuyệt vời! Tất cả tài xế đều được việc.</div> :
+                                    warningDrivers.map(d => (
+                                        <div key={d.id} style={{ background: '#fdf2f2', padding: '10px', borderRadius: '6px', borderLeft: '3px solid #e74c3c' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: 14 }}>{d.name}</div>
+                                            {!d.lastCompleted ? (
+                                                <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>⚠️ Chưa chạy chuyến nào!</div>
+                                            ) : (
+                                                <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>
+                                                    ⏳ Đã nằm bãi: <strong>{formatDuration(d.idleSinceMs)}</strong>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                        </div>
+
+                        {/* CỘT 3: TOP CHĂM CHỈ */}
+                        <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e0e0e0', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                            <div style={{ background: '#27ae60', color: 'white', padding: '12px 15px', fontWeight: 'bold' }}>
+                                🔥 Năng suất xuất sắc Tháng {selectedMonth.split('-')[1]}
+                            </div>
+                            <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
+                                {topDrivers.length === 0 ? <div style={{ color: '#999', fontSize: 13 }}>Chưa có ai hoàn thành chuyến nào.</div> :
+                                    topDrivers.map((d, i) => (
+                                        <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f4fbf6', padding: '10px', borderRadius: '6px', borderLeft: `3px solid ${i === 0 ? '#f1c40f' : '#2ecc71'}` }}>
+                                            <div>
+                                                <div style={{ fontWeight: 'bold', fontSize: 14 }}>{i+1}. {d.name}</div>
+                                                <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>
+                                                    {d.lastCompleted ? `Lần cuối: ${formatDuration(now - d.lastCompleted.tEnd)} trước` : ''}
+                                                </div>
+                                            </div>
+                                            <div style={{ fontSize: 18, fontWeight: 'bold', color: '#27ae60' }}>{d.monthTripCount}</div>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* BỘ LỌC */}
+                    <div style={{ background: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: 16 }}>📋 Chi tiết Nhật Ký Các Lệnh Điều Động / Chuyến Hàng</h3>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <input type="text" placeholder="🔍 Tên tài xế, xe..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                style={{ flex: '1', minWidth: '150px', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <label style={{ fontSize: '13px', fontWeight: 'bold' }}>Tháng:</label>
+                                <input type="month" value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setDateFrom(''); setDateTo(''); }}
+                                    style={{ padding: '7px', border: '1px solid #ddd', borderRadius: '6px' }} />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <label style={{ fontSize: '13px', fontWeight: 'bold' }}>Từ ngày:</label>
+                                <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setSelectedMonth(''); }}
+                                    style={{ padding: '7px', border: '1px solid #ddd', borderRadius: '6px' }} />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <label style={{ fontSize: '13px', fontWeight: 'bold' }}>Đến:</label>
+                                <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setSelectedMonth(''); }}
+                                    style={{ padding: '7px', border: '1px solid #ddd', borderRadius: '6px' }} />
+                            </div>
+                            <button onClick={clearFilters} style={{ padding: '8px 14px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✕ Xóa lọc</button>
+                        </div>
+                    </div>
+
+                    {/* BẢNG DETAILS */}
+                    {filteredAndSortedTrips.length === 0 ? (
+                        <div className="empty-state">Không có dữ liệu phù hợp.</div>
+                    ) : (
+                        <div className="table-container">
+                            <table className="data-table" style={{ fontSize: 13 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Tài Xế & Xe</th>
+                                        <th>Hành Trình</th>
+                                        <th>Giờ Đi (Bắt Đầu)</th>
+                                        <th>Giờ Về (Hoàn Thành)</th>
+                                        <th style={{ background: '#f5f5f5' }}>⏱️ Thời Lượng Chuyến</th>
+                                        <th style={{ background: '#eaf2f8' }}>☕ Nghỉ So Với Chuyến Trước</th>
+                                        <th>Trạng Thái</th>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                </thead>
+                                <tbody>
+                                    {filteredAndSortedTrips.map(trip => {
+                                        const dtStart = trip.tStart ? new Date(trip.tStart).toLocaleString('vi-VN') : '-';
+                                        const dtEnd = trip.tEnd ? new Date(trip.tEnd).toLocaleString('vi-VN') : 'Đang xử lý';
+                                        const isCompleted = trip.status === 'completed';
+                                        
+                                        // Cảnh báo ép tua nếu nghỉ quá ít (dưới 4 tiếng = 14400000ms)
+                                        const isOverworked = trip.idleBeforeMs && trip.idleBeforeMs < 14400000;
+
+                                        return (
+                                            <tr key={trip.id} style={{ background: isCompleted ? 'transparent' : '#fffcf5' }}>
+                                                <td>
+                                                    <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>{trip.assignedDriverName}</div>
+                                                    <div style={{ color: '#666', fontSize: 12 }}>{trip.vehiclePlate}</div>
+                                                </td>
+                                                <td>
+                                                    <div>Kho: {trip.sourceWarehouse || 'Kho Tổng'}</div>
+                                                    <div style={{ fontWeight: 'bold', color: '#2980b9' }}>→ {trip.destination || '-'}</div>
+                                                    <div style={{ fontSize: 11, color: '#7f8c8d' }}>{trip.product}</div>
+                                                </td>
+                                                <td>{dtStart}</td>
+                                                <td style={{ fontWeight: isCompleted ? 'bold' : 'normal', color: isCompleted ? '#27ae60' : '#888' }}>
+                                                    {dtEnd}
+                                                </td>
+                                                <td style={{ background: '#fdfdfd', textAlign: 'center', fontWeight: 'bold', color: '#8e44ad' }}>
+                                                    {formatDuration(trip.durationMs)}
+                                                </td>
+                                                <td style={{ background: '#f8fcff', textAlign: 'center', color: isOverworked ? '#c0392b' : '#34495e', fontWeight: isOverworked ? 'bold' : 'normal' }}>
+                                                    {trip.idleBeforeMs ? formatDuration(trip.idleBeforeMs) : 'Chuyến đầu tiên / Ko rõ'}
+                                                    {isOverworked && <span title="Nghỉ quá ngắn" style={{ marginLeft: 4 }}>⚠️</span>}
+                                                </td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <span style={{ 
+                                                        background: isCompleted ? '#d4edda' : '#fff3cd', 
+                                                        color: isCompleted ? '#155724' : '#856404', 
+                                                        padding: '4px 8px', borderRadius: '12px', fontWeight: 'bold', fontSize: '11px' 
+                                                    }}>
+                                                        {trip.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
