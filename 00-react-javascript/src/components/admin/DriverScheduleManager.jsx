@@ -46,18 +46,28 @@ function DriverScheduleManager() {
         return `${minutes} phút`;
     };
 
+    // Helper xử lý Date an toàn
+    const getSafeDateMs = (d) => {
+        if (!d) return null;
+        if (d._seconds) return d._seconds * 1000;
+        if (d.seconds) return d.seconds * 1000;
+        const p = new Date(d);
+        if (isNaN(p.getTime())) return null;
+        return p.getTime();
+    };
+
     // XỬ LÝ DỮ LIỆU ĐỂ TÍNH TOÁN (Dùng useMemo để không lag)
     const { processedTrips, driverStats, activeDrivers, warningDrivers, topDrivers } = useMemo(() => {
-        const now = new Date();
+        const nowMs = Date.now();
         const tripsByDriver = {};
         
         // Nhóm các lệnh theo từng tài xế & Lọc trip hợp lệ
         const validOrders = allOrders.filter(o => o.assignedDriverId).map(o => {
-            const tStart = new Date(o.createdAt?._seconds ? o.createdAt._seconds * 1000 : o.createdAt || 0);
-            const tEnd = (o.status === 'completed' || o.status === 'cancelled') 
-                       ? new Date(o.updatedAt?._seconds ? o.updatedAt._seconds * 1000 : o.updatedAt || 0)
+            const tStartMs = getSafeDateMs(o.createdAt) || 0;
+            const tEndMs = (o.status === 'completed' || o.status === 'cancelled') 
+                       ? getSafeDateMs(o.updatedAt)
                        : null;
-            return { ...o, tStart, tEnd };
+            return { ...o, tStart: tStartMs, tEnd: tEndMs };
         }).sort((a, b) => a.tStart - b.tStart); // Sort tăng dần thời gian nhận lệnh
 
         // Map danh sách chuyến cho từng tài xế để tính khoảng nghĩ (interval)
@@ -98,19 +108,20 @@ function DriverScheduleManager() {
             
             // Chuyến đã hoàn thành tháng này
             const monthTrips = dTrips.filter(t => {
-                if (t.status !== 'completed') return false;
-                const ds = t.updatedAt || t.createdAt || '';
-                const dateStr = typeof ds === 'string' ? ds : new Date(t.tEnd).toISOString();
-                return dateStr.startsWith(selectedMonth);
+                if (t.status !== 'completed' || !t.tEnd) return false;
+                try {
+                    const dateStr = new Date(t.tEnd).toISOString();
+                    return dateStr.startsWith(selectedMonth);
+                } catch(e) { return false; }
             });
 
             // Tìm chuyến hoàn thành cuối cùng
-            const completedTrips = dTrips.filter(t => t.status === 'completed').sort((a, b) => b.tEnd - a.tEnd);
+            const completedTrips = dTrips.filter(t => t.status === 'completed' && t.tEnd).sort((a, b) => b.tEnd - a.tEnd);
             const lastCompleted = completedTrips[0];
             
             let idleSinceMs = null;
             if (!activeTrip && lastCompleted) {
-                idleSinceMs = now - lastCompleted.tEnd;
+                idleSinceMs = nowMs - lastCompleted.tEnd;
             }
 
             return {
@@ -128,7 +139,7 @@ function DriverScheduleManager() {
         const warningList = stats.filter(s => !s.activeTrip && (s.idleSinceMs > 172800000 || !s.lastCompleted)).sort((a, b) => (b.idleSinceMs || Infinity) - (a.idleSinceMs || Infinity));
         const topList = [...stats].filter(s => s.monthTripCount > 0).sort((a, b) => b.monthTripCount - a.monthTripCount).slice(0, 5);
 
-        return { processedTrips: allProcessedTrips, driverStats: stats, activeDrivers: activeList, warningDrivers: warningList, topDrivers: topList };
+        return { processedTrips: allProcessedTrips, driverStats: stats, activeDrivers: activeList, warningDrivers: warningList, topList };
     }, [allOrders, drivers, selectedMonth]);
 
     // LỌC BẢNG NHẬT KÝ
@@ -138,18 +149,24 @@ function DriverScheduleManager() {
             (t.assignedDriverName || '').toLowerCase().includes(term) ||
             (t.vehiclePlate || '').toLowerCase().includes(term);
 
-        const tripDateObj = t.tEnd || t.tStart;
-        const tripDate = tripDateObj ? new Date(tripDateObj).toISOString().substring(0, 10) : '';
-
+        const tripDateObjMs = t.tEnd || t.tStart;
         let matchDate = true;
-        if (dateFrom && dateTo) {
-            matchDate = tripDate >= dateFrom && tripDate <= dateTo;
-        } else if (dateFrom) {
-            matchDate = tripDate >= dateFrom;
-        } else if (dateTo) {
-            matchDate = tripDate <= dateTo;
-        } else if (selectedMonth) {
-            matchDate = tripDate.startsWith(selectedMonth);
+        
+        if (tripDateObjMs) {
+            try {
+                const tripDate = new Date(tripDateObjMs).toISOString().substring(0, 10);
+                if (dateFrom && dateTo) {
+                    matchDate = tripDate >= dateFrom && tripDate <= dateTo;
+                } else if (dateFrom) {
+                    matchDate = tripDate >= dateFrom;
+                } else if (dateTo) {
+                    matchDate = tripDate <= dateTo;
+                } else if (selectedMonth) {
+                    matchDate = tripDate.startsWith(selectedMonth);
+                }
+            } catch(e) { matchDate = false; }
+        } else {
+            matchDate = !dateFrom && !dateTo && !selectedMonth; // Nếu filter trống thì pass
         }
 
         return matchSearch && matchDate;
@@ -219,16 +236,16 @@ function DriverScheduleManager() {
                         {/* CỘT 3: TOP CHĂM CHỈ */}
                         <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e0e0e0', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                             <div style={{ background: '#27ae60', color: 'white', padding: '12px 15px', fontWeight: 'bold' }}>
-                                🔥 Năng suất xuất sắc Tháng {selectedMonth.split('-')[1]}
+                                🔥 Năng suất tháng {selectedMonth.split('-')[1] || selectedMonth}
                             </div>
                             <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
-                                {topDrivers.length === 0 ? <div style={{ color: '#999', fontSize: 13 }}>Chưa có ai hoàn thành chuyến nào.</div> :
-                                    topDrivers.map((d, i) => (
+                                {topList.length === 0 ? <div style={{ color: '#999', fontSize: 13 }}>Chưa có ai hoàn thành chuyến nào.</div> :
+                                    topList.map((d, i) => (
                                         <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f4fbf6', padding: '10px', borderRadius: '6px', borderLeft: `3px solid ${i === 0 ? '#f1c40f' : '#2ecc71'}` }}>
                                             <div>
                                                 <div style={{ fontWeight: 'bold', fontSize: 14 }}>{i+1}. {d.name}</div>
                                                 <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>
-                                                    {d.lastCompleted ? `Lần cuối: ${formatDuration(now - d.lastCompleted.tEnd)} trước` : ''}
+                                                    {d.lastCompleted && d.lastCompleted.tEnd ? `Lần cuối: ${formatDuration(Date.now() - d.lastCompleted.tEnd)} trước` : ''}
                                                 </div>
                                             </div>
                                             <div style={{ fontSize: 18, fontWeight: 'bold', color: '#27ae60' }}>{d.monthTripCount}</div>
