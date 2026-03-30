@@ -19,7 +19,7 @@ if (Platform.OS !== 'web') {
   AccessToken = fbsdk.AccessToken;
 
   GoogleSignin.configure({
-    webClientId: '610440909699-8gbo0neolfv7ahg2du7csgeucdqn5gtj.apps.googleusercontent.com',
+    webClientId: '255173081788-immv0l75d0pmbig17rumrkrttdr6i10p.apps.googleusercontent.com',
   });
 }
 
