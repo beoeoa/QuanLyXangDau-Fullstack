@@ -74,6 +74,7 @@ export default function DriverLayout() {
       <Tabs.Screen name="camera" options={{ href: null }} />
       <Tabs.Screen name="trip-detail" options={{ href: null }} />
       <Tabs.Screen name="expense-form" options={{ href: null }} />
+      <Tabs.Screen name="location-search" options={{ href: null }} />
     </Tabs>
   );
 }
