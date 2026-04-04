@@ -107,9 +107,31 @@ function LiveTrackingMap() {
     useEffect(() => {
         if (!selectedOrder || !map.current) return
         const fly = async () => {
-            const destCoords = await geocode(selectedOrder.destination)
-            if (destCoords) {
-                map.current.flyTo({ center: destCoords, zoom: 11, speed: 1.5 })
+            const gpsLat = selectedOrder.currentLat != null ? parseFloat(selectedOrder.currentLat)
+                         : selectedOrder.currentLocation?.lat != null ? parseFloat(selectedOrder.currentLocation.lat)
+                         : null;
+            const gpsLng = selectedOrder.currentLng != null ? parseFloat(selectedOrder.currentLng)
+                         : selectedOrder.currentLocation?.lng != null ? parseFloat(selectedOrder.currentLocation.lng)
+                         : null;
+
+            let centerCoords = null;
+            if (gpsLat && gpsLng) {
+                // 1. Tọa độ thực tế hiện tại
+                centerCoords = [gpsLng, gpsLat];
+            } else if (selectedOrder.locationHistory && selectedOrder.locationHistory.length > 0) {
+                // 2. Lần cuối cùng phát tín hiệu
+                const lastHistory = selectedOrder.locationHistory[selectedOrder.locationHistory.length - 1];
+                centerCoords = [parseFloat(lastHistory.lng), parseFloat(lastHistory.lat)];
+            } else if (selectedOrder.status === 'pending' || selectedOrder.status === 'received') {
+                // 3. Chưa xuất phát
+                centerCoords = await geocode(selectedOrder.sourceWarehouse || selectedOrder.exportWarehouse || 'Cảng Đình Vũ, Hải Phòng');
+            } else {
+                // 4. Nếu mất dấu hoàn toàn thì trỏ về đích đến
+                centerCoords = await geocode(selectedOrder.destination);
+            }
+
+            if (centerCoords) {
+                map.current.flyTo({ center: centerCoords, zoom: 14, speed: 1.5 })
             }
         }
         fly()
@@ -142,17 +164,17 @@ function LiveTrackingMap() {
 
             // ===== BƯỚC 1: LẤY TOẠ ĐỘ THẬT TỪ DATABASE =====
             const gpsLat = order.currentLat != null ? parseFloat(order.currentLat)
-                         : order.currentLocation?.lat != null ? parseFloat(order.currentLocation.lat)
-                         : null;
+                : order.currentLocation?.lat != null ? parseFloat(order.currentLocation.lat)
+                    : null;
             const gpsLng = order.currentLng != null ? parseFloat(order.currentLng)
-                         : order.currentLocation?.lng != null ? parseFloat(order.currentLocation.lng)
-                         : null;
+                : order.currentLocation?.lng != null ? parseFloat(order.currentLocation.lng)
+                    : null;
 
             // ===== BƯỚC 2: VẼ MARKER XE NGAY LẬP TỨC (Độc lập, không phụ thuộc vào Route) =====
             const elTruck = document.createElement('div')
             elTruck.style.cssText = `font-size: 28px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.4)); transform: translate(-50%, -50%); z-index: 20; cursor: pointer;`
             elTruck.innerHTML = '🚛'
-            elTruck.title = `Xe: ${order.vehiclePlate} | GPS: ${gpsLat ? gpsLat.toFixed(4)+','+gpsLng.toFixed(4) : 'Chưa có'}`
+            elTruck.title = `Xe: ${order.vehiclePlate} | GPS: ${gpsLat ? gpsLat.toFixed(4) + ',' + gpsLng.toFixed(4) : 'Chưa có'}`
 
             const lastUpdate = order.lastLocationUpdate
                 ? (order.lastLocationUpdate._seconds
@@ -165,7 +187,7 @@ function LiveTrackingMap() {
                     <div style="font-family:sans-serif; min-width:200px; padding:4px;">
                         <div style="font-weight:700; color:#e67e22; font-size:14px; margin-bottom:6px;">🚛 ${order.vehiclePlate || '?'}</div>
                         <div style="font-size:12px; margin:2px 0;"><b>👤</b> ${order.assignedDriverName || '-'}</div>
-                        <div style="font-size:12px; margin:2px 0;"><b>📦</b> ${order.product || '-'} · ${Number(order.amount||0).toLocaleString()}L</div>
+                        <div style="font-size:12px; margin:2px 0;"><b>📦</b> ${order.product || '-'} · ${Number(order.amount || 0).toLocaleString()}L</div>
                         <hr style="border:none;border-top:1px solid #eee; margin:6px 0;"/>
                         <div style="font-size:11px; color:${gpsLat ? '#27ae60' : '#e74c3c'};">
                             📍 GPS: ${gpsLat ? `${gpsLat.toFixed(5)}, ${gpsLng.toFixed(5)}` : '<b>Chưa có tín hiệu</b>'}
@@ -181,11 +203,17 @@ function LiveTrackingMap() {
             if (gpsLat && gpsLng) {
                 // 1. Ưu tiên GPS thật từ điện thoại
                 truckPos = [gpsLng, gpsLat];
+            } else if (order.locationHistory && order.locationHistory.length > 0) {
+                // 2. Lần cuối cùng phát tín hiệu
+                const lastHistory = order.locationHistory[order.locationHistory.length - 1];
+                truckPos = [parseFloat(lastHistory.lng), parseFloat(lastHistory.lat)];
             } else if (order.status === 'pending' || order.status === 'received') {
-                // 2. Chưa xuất phát → xe đang ở KHO XUẤT
+                // 3. Chưa xuất phát → xe đang ở KHO XUẤT
                 truckPos = warehouseCoords;
+            } else if (order.status === 'arrived' || order.status === 'unloading' || order.status === 'completed') {
+                // 4. Nếu đã đến mà không có gps thì giả định ở trạm
+                truckPos = await geocode(order.destination);
             }
-            // arrived/unloading/moving without GPS → ẩn xe (không đoán mò)
 
             if (truckPos) {
                 const truckMarker = new trackasia.Marker({ element: elTruck })
@@ -235,7 +263,7 @@ function LiveTrackingMap() {
                                 map.current.addLayer({ id: sourceId, type: 'line', source: sourceId, paint: { 'line-color': cfg.color, 'line-width': 3, 'line-dasharray': [2, 1] } })
                                 routeLinesRef.current.push(sourceId)
                             }
-                        } catch {}
+                        } catch { }
                     }
                 }
             }
