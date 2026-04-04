@@ -248,6 +248,7 @@ body {
 
 .stat-info {
   flex: 1;
+  min-width: 0;
 }
 
 .stat-info h3 {
@@ -261,10 +262,12 @@ body {
 
 .stat-number {
   color: var(--text-primary);
-  font-size: 26px;
+  font-size: clamp(18px, 4vw, 24px); /* Responsive font-size cho số */
   font-weight: 700;
   margin: 0;
   letter-spacing: -0.5px;
+  word-break: break-word; /* Wrap text nếu số quá dài */
+  line-height: 1.2;
 }
 
 /* Buttons */

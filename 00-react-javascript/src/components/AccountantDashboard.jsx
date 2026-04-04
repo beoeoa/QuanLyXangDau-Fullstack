@@ -466,6 +466,14 @@ function AccountantDashboard({ user, onLogout }) {
 
     const pendingExpenses = filteredExpenses.filter(e => e.status === 'pending')
 
+    const formatCurrency = (amount) => {
+        if (!amount) return '0 ₫';
+        if (Math.abs(amount) >= 1e12) return (amount / 1e12).toFixed(2) + ' Nghìn Tỷ';
+        if (Math.abs(amount) >= 1e9) return (amount / 1e9).toFixed(2) + ' Tỷ';
+        if (Math.abs(amount) >= 1e6) return (amount / 1e6).toFixed(2) + ' Tr';
+        return amount.toLocaleString() + ' ₫';
+    }
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -479,35 +487,35 @@ function AccountantDashboard({ user, onLogout }) {
             <div className="stat-icon" style={{ color: '#27ae60' }}><DollarSign size={24} /></div>
             <div className="stat-info">
               <h3>Doanh thu</h3>
-              <p className="stat-number">{totalRev.toLocaleString()}đ</p>
+              <p className="stat-number" title={totalRev.toLocaleString() + 'đ'}>{formatCurrency(totalRev)}</p>
             </div>
           </div>
           <div className="stat-card" style={{ borderLeft: '4px solid #8e44ad' }}>
             <div className="stat-icon" style={{ color: '#8e44ad' }}><Package size={24} /></div>
             <div className="stat-info">
               <h3>Giá vốn hàng</h3>
-              <p className="stat-number">{totalCostGoods.toLocaleString()}đ</p>
+              <p className="stat-number" title={totalCostGoods.toLocaleString() + 'đ'}>{formatCurrency(totalCostGoods)}</p>
             </div>
           </div>
           <div className="stat-card" style={{ borderLeft: '4px solid #f39c12' }}>
             <div className="stat-icon" style={{ color: '#f39c12' }}><Truck size={24} /></div>
             <div className="stat-info">
               <h3>DT Vận tải</h3>
-              <p className="stat-number">{totalFreightRev.toLocaleString()}đ</p>
+              <p className="stat-number" title={totalFreightRev.toLocaleString() + 'đ'}>{formatCurrency(totalFreightRev)}</p>
             </div>
           </div>
           <div className="stat-card" style={{ borderLeft: '4px solid #e74c3c' }}>
             <div className="stat-icon" style={{ color: '#e74c3c' }}><Wallet size={24} /></div>
             <div className="stat-info">
               <h3>Chi phí vận hành</h3>
-              <p className="stat-number">{totalExpense.toLocaleString()}đ</p>
+              <p className="stat-number" title={totalExpense.toLocaleString() + 'đ'}>{formatCurrency(totalExpense)}</p>
             </div>
           </div>
           <div className="stat-card" style={{ borderLeft: `4px solid ${netProfit >= 0 ? '#3498db' : '#e74c3c'}` }}>
             <div className="stat-icon" style={{ color: netProfit >= 0 ? '#3498db' : '#e74c3c' }}><TrendingUp size={24} /></div>
             <div className="stat-info">
               <h3>Lợi Nhuận Ròng</h3>
-              <p className="stat-number" style={{ color: netProfit >= 0 ? '#3498db' : '#e74c3c' }}>{netProfit.toLocaleString()}đ</p>
+              <p className="stat-number" style={{ color: netProfit >= 0 ? '#3498db' : '#e74c3c' }} title={netProfit.toLocaleString() + 'đ'}>{formatCurrency(netProfit)}</p>
             </div>
           </div>
         </div>

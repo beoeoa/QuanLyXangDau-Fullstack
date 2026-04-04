@@ -58,6 +58,14 @@ function OverviewDashboard() {
         setLoading(false)
     }
 
+    const formatCurrency = (amount) => {
+        if (!amount) return '0 ₫';
+        if (Math.abs(amount) >= 1e12) return (amount / 1e12).toFixed(2) + ' Nghìn Tỷ';
+        if (Math.abs(amount) >= 1e9) return (amount / 1e9).toFixed(2) + ' Tỷ';
+        if (Math.abs(amount) >= 1e6) return (amount / 1e6).toFixed(2) + ' Tr';
+        return amount.toLocaleString() + ' ₫';
+    }
+
     // Recalculate everything when rawData or filters change
     useEffect(() => {
         if (!rawData.users.length && !loading) return;
@@ -250,21 +258,21 @@ function OverviewDashboard() {
                     <div className="stat-icon" style={{ color: '#27ae60' }}><DollarSign size={24} /></div>
                     <div className="stat-info">
                         <h3>Tổng Doanh Thu</h3>
-                        <p className="stat-number">{stats.totalRevenue.toLocaleString()}đ</p>
+                        <p className="stat-number" title={stats.totalRevenue.toLocaleString() + 'đ'}>{formatCurrency(stats.totalRevenue)}</p>
                     </div>
                 </div>
                 <div className="stat-card" style={{ borderLeft: '4px solid #e74c3c' }}>
                     <div className="stat-icon" style={{ color: '#e74c3c' }}><Wallet size={24} /></div>
                     <div className="stat-info">
                         <h3>Tổng Chi Phí</h3>
-                        <p className="stat-number">{stats.totalCost.toLocaleString()}đ</p>
+                        <p className="stat-number" title={stats.totalCost.toLocaleString() + 'đ'}>{formatCurrency(stats.totalCost)}</p>
                     </div>
                 </div>
                 <div className="stat-card" style={{ borderLeft: '4px solid #f39c12' }}>
                     <div className="stat-icon" style={{ color: '#f39c12' }}><TrendingUp size={24} /></div>
                     <div className="stat-info">
                         <h3>Lợi Nhuận Ròng</h3>
-                        <p className="stat-number">{(stats.netProfit || 0).toLocaleString()}đ</p>
+                        <p className="stat-number" title={(stats.netProfit || 0).toLocaleString() + 'đ'}>{formatCurrency(stats.netProfit || 0)}</p>
                     </div>
                 </div>
                 <div className="stat-card" style={{ borderLeft: '4px solid #3498db' }}>
