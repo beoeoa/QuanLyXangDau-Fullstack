@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 
 const QUICK_FILTERS = [
   { key: 'today', label: 'Hôm nay' },
-  { key: 'week', label: 'Tuần này' },
-  { key: 'month', label: 'Tháng này' },
-  { key: 'quarter', label: 'Quý này' },
+  { key: 'week', label: '7 Ngày' },
+  { key: 'month', label: '30 Ngày' },
+  { key: 'quarter', label: '90 Ngày' },
   { key: 'year', label: 'Năm nay' },
   { key: 'all', label: 'Tất cả' },
 ]
@@ -12,23 +12,27 @@ const QUICK_FILTERS = [
 function getRange(key) {
   const now = new Date()
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
   switch (key) {
     case 'today':
-      return { from: startOfDay, to: now }
+      return { from: startOfDay, to: endOfDay }
     case 'week': {
-      const day = now.getDay() || 7
-      const mon = new Date(startOfDay)
-      mon.setDate(mon.getDate() - day + 1)
-      return { from: mon, to: now }
+      const d = new Date(startOfDay)
+      d.setDate(d.getDate() - 6)
+      return { from: d, to: endOfDay }
     }
-    case 'month':
-      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now }
+    case 'month': {
+      const d = new Date(startOfDay)
+      d.setDate(d.getDate() - 29)
+      return { from: d, to: endOfDay }
+    }
     case 'quarter': {
-      const q = Math.floor(now.getMonth() / 3) * 3
-      return { from: new Date(now.getFullYear(), q, 1), to: now }
+      const d = new Date(startOfDay)
+      d.setDate(d.getDate() - 89)
+      return { from: d, to: endOfDay }
     }
     case 'year':
-      return { from: new Date(now.getFullYear(), 0, 1), to: now }
+      return { from: new Date(now.getFullYear(), 0, 1), to: endOfDay }
     case 'all':
     default:
       return { from: null, to: null }
