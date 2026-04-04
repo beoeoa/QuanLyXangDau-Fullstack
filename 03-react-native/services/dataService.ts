@@ -24,52 +24,41 @@ const safeParseJSON = async (res: Response) => {
 
 const API_URL = getApiUrl();
 
-// ─── Firebase Storage Upload ────────────────────────────────────────────────
-let _storageReady = false;
-let _storageRef: any = null;
-let _uploadBytes: any = null;
-let _getDownloadURL: any = null;
-
-const initStorage = async () => {
-  if (_storageReady) return true;
-  try {
-    const { initializeApp, getApps } = await import('firebase/app');
-    const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-    const cfg = {
-      apiKey: (process.env as any).EXPO_PUBLIC_FIREBASE_API_KEY || '',
-      authDomain: (process.env as any).EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-      projectId: (process.env as any).EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
-      storageBucket: (process.env as any).EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-      messagingSenderId: (process.env as any).EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-      appId: (process.env as any).EXPO_PUBLIC_FIREBASE_APP_ID || '',
-    };
-    const app = getApps().length === 0 ? initializeApp(cfg) : getApps()[0];
-    const storage = getStorage(app);
-    _storageRef = (path: string) => ref(storage, path);
-    _uploadBytes = uploadBytes;
-    _getDownloadURL = getDownloadURL;
-    _storageReady = true;
-    return true;
-  } catch (e) {
-    console.warn('[STORAGE] Firebase Storage chưa cấu hình:', e);
-    return false;
-  }
-};
+// ─── Firebase Storage Upload via REST API ───────────────────────────────────
+// Dùng Firebase Storage REST API thay vì SDK để tránh lỗi dynamic import trên RN
+const FIREBASE_STORAGE_BUCKET = process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'quanlyxangdau-3fa49.firebasestorage.app';
+const FIREBASE_API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBKpmlQ8f4VkkyzGftw7a0Qy_z11fkXe-8';
 
 /**
- * Upload ảnh từ localUri (file://) lên Firebase Storage.
+ * Upload ảnh từ localUri (file://) lên Firebase Storage qua REST API.
  * Trả về download URL để lưu vào Firestore.
  */
-export const uploadImageToFirebase = async (localUri: string, path: string): Promise<string> => {
-  const ok = await initStorage();
-  if (!ok) throw new Error('Firebase Storage chưa khởi tạo');
-  const response = await fetch(localUri);
-  const blob = await response.blob();
-  const storageRef = _storageRef(path);
-  await _uploadBytes(storageRef, blob);
-  return await _getDownloadURL(storageRef);
-};
+export const uploadImageToFirebase = async (localUri: string, storagePath: string): Promise<string> => {
+  // Đọc file thành blob
+  const fileRes = await fetch(localUri);
+  if (!fileRes.ok) throw new Error('Không đọc được file ảnh');
+  const blob = await fileRes.blob();
 
+  // Encode đường dẫn để dùng trong URL
+  const encodedPath = encodeURIComponent(storagePath);
+  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name=${encodedPath}&key=${FIREBASE_API_KEY}`;
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': blob.type || 'image/jpeg' },
+    body: blob,
+  });
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    throw new Error(`Upload thất bại: ${uploadRes.status} - ${errText}`);
+  }
+
+  const uploadData = await uploadRes.json();
+  // Tạo download URL có token
+  const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}?alt=media&token=${uploadData.downloadTokens}`;
+  return downloadUrl;
+};
 
 
 export const fetchDriverOrders = async (driverId: string) => {

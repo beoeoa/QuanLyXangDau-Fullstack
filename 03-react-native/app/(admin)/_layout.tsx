@@ -1,11 +1,21 @@
 import { Tabs } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AdminLayout() {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs screenOptions={{ 
       tabBarActiveTintColor: '#0070f3',
-      tabBarStyle: { height: 60, paddingBottom: 10, paddingTop: 5, backgroundColor: '#fff', borderTopWidth: 0, elevation: 10 },
+      tabBarStyle: {
+        height: (Platform.OS === 'ios' ? 55 : 60) + Math.max(insets.bottom, 5),
+        paddingBottom: Math.max(insets.bottom, 5),
+        paddingTop: 5,
+        backgroundColor: '#fff',
+        borderTopWidth: 0,
+        elevation: 10,
+      },
       headerShown: false
     }}>
       <Tabs.Screen 

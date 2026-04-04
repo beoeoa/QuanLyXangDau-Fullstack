@@ -1,9 +1,13 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, Alert, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  FlatList, Alert, ActivityIndicator, Image, ScrollView
+} from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import { useTripStore } from '../../store/tripStore';
-import { createSOSReport, fetchDriverSOS } from '../../services/dataService';
+import { createSOSReport, fetchDriverSOS, uploadImageToFirebase } from '../../services/dataService';
 import { getCurrentLocation } from '../../services/locationService';
 
 const SOS_TYPES = [
@@ -30,6 +34,11 @@ export default function SOSScreen() {
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
+  // Photo attachment
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
   const loadHistory = useCallback(async () => {
     if (user?.userId) {
       const data = await fetchDriverSOS(user.userId);
@@ -41,6 +50,58 @@ export default function SOSScreen() {
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  // ─── Chụp / chọn ảnh hiện trường ───────────────────────────────────────────
+  const handlePickPhoto = () => {
+    Alert.alert('Đính kèm ảnh hiện trường', 'Chọn nguồn ảnh', [
+      {
+        text: '📷 Chụp ảnh',
+        onPress: async () => {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (perm.status !== 'granted') {
+            Alert.alert('Quyền truy cập', 'Cần cấp quyền Camera để chụp ảnh hiện trường.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+          if (!result.canceled && result.assets[0]) {
+            await uploadSosPhoto(result.assets[0].uri);
+          }
+        },
+      },
+      {
+        text: '🖼️ Chọn từ thư viện',
+        onPress: async () => {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (perm.status !== 'granted') {
+            Alert.alert('Quyền truy cập', 'Cần cấp quyền truy cập Thư viện ảnh.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+          if (!result.canceled && result.assets[0]) {
+            await uploadSosPhoto(result.assets[0].uri);
+          }
+        },
+      },
+      { text: 'Hủy', style: 'cancel' },
+    ]);
+  };
+
+  const uploadSosPhoto = async (uri: string) => {
+    setPhotoUri(uri);
+    setUploadingPhoto(true);
+    try {
+      const timestamp = Date.now();
+      const path = `sos-photos/${user?.userId || 'unknown'}/${timestamp}.jpg`;
+      const url = await uploadImageToFirebase(uri, path);
+      setPhotoUrl(url);
+      Alert.alert('✅ Thành công', 'Ảnh hiện trường đã được tải lên.');
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể tải ảnh lên. Ảnh sẽ được gửi kèm mô tả văn bản.');
+      setPhotoUrl(null);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleSendSOS = async () => {
     if (!selectedType) {
@@ -63,6 +124,7 @@ export default function SOSScreen() {
       driverName: user?.name || '',
       type: selectedType,
       description: description || 'Không có mô tả thêm',
+      photoUrl: photoUrl || undefined,
       lat, lng,
       orderId: activeTrip?.id,
     });
@@ -74,6 +136,8 @@ export default function SOSScreen() {
       setMode('main');
       setSelectedType(null);
       setDescription('');
+      setPhotoUri(null);
+      setPhotoUrl(null);
       loadHistory();
     } else {
       Alert.alert('Lỗi', 'Không thể gửi báo cáo. Vui lòng thử lại.');
@@ -125,6 +189,9 @@ export default function SOSScreen() {
                       </View>
                     </View>
                     <Text style={styles.historyDesc} numberOfLines={2}>{item.description}</Text>
+                    {item.photoUrl && (
+                      <Image source={{ uri: item.photoUrl }} style={styles.historyPhoto} />
+                    )}
                     <Text style={styles.historyDate}>
                       {item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : '---'}
                     </Text>
@@ -137,7 +204,7 @@ export default function SOSScreen() {
         </View>
       ) : (
         /* SOS Form */
-        <View style={styles.formContent}>
+        <ScrollView style={styles.formContent} showsVerticalScrollIndicator={false}>
           <Text style={styles.formTitle}>Chọn loại sự cố:</Text>
 
           <View style={styles.typeGrid}>
@@ -169,8 +236,30 @@ export default function SOSScreen() {
             numberOfLines={3}
           />
 
+          {/* Đính kèm ảnh hiện trường */}
+          <Text style={styles.formLabel}>Ảnh hiện trường:</Text>
+          <TouchableOpacity style={styles.photoPickerBtn} onPress={handlePickPhoto} disabled={uploadingPhoto}>
+            {uploadingPhoto ? (
+              <ActivityIndicator color="#ef4444" />
+            ) : photoUri ? (
+              <View style={styles.photoPreviewWrap}>
+                <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+                <View style={styles.photoOverlay}>
+                  <Ionicons name={photoUrl ? 'checkmark-circle' : 'cloud-upload'} size={24} color={photoUrl ? '#10b981' : '#fff'} />
+                  <Text style={styles.photoOverlayText}>{photoUrl ? 'Đã tải lên ✓' : 'Đang tải...'}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Ionicons name="camera" size={32} color="#94a3b8" />
+                <Text style={styles.photoPlaceholderText}>Chụp ảnh hiện trường</Text>
+                <Text style={styles.photoPlaceholderSub}>(Tùy chọn nhưng khuyến khích)</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           <View style={styles.formActions}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => { setMode('main'); setSelectedType(null); }}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => { setMode('main'); setSelectedType(null); setPhotoUri(null); setPhotoUrl(null); }}>
               <Text style={styles.cancelBtnText}>Hủy</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -185,7 +274,7 @@ export default function SOSScreen() {
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -229,7 +318,8 @@ const styles = StyleSheet.create({
   historyType: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
   historyBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
   historyBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  historyDesc: { color: '#64748b', fontSize: 13, marginBottom: 4 },
+  historyDesc: { color: '#64748b', fontSize: 13, marginBottom: 6 },
+  historyPhoto: { width: '100%', height: 120, borderRadius: 8, marginBottom: 6, resizeMode: 'cover' },
   historyDate: { color: '#94a3b8', fontSize: 12 },
 
   formContent: { flex: 1, padding: 16 },
@@ -247,12 +337,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', borderRadius: 12,
     padding: 14, color: '#0f172a', fontSize: 15,
     borderWidth: 1, borderColor: '#e2e8f0',
-    textAlignVertical: 'top', minHeight: 80,
+    textAlignVertical: 'top', minHeight: 80, marginBottom: 16,
   },
 
-  formActions: {
-    flexDirection: 'row', gap: 12, marginTop: 20,
+  // Photo picker
+  photoPickerBtn: {
+    backgroundColor: '#fff', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#e2e8f0',
+    borderStyle: 'dashed', marginBottom: 20, overflow: 'hidden',
   },
+  photoPlaceholder: {
+    alignItems: 'center', padding: 24, gap: 6,
+  },
+  photoPlaceholderText: { color: '#64748b', fontSize: 14, fontWeight: '600' },
+  photoPlaceholderSub: { color: '#94a3b8', fontSize: 12 },
+  photoPreviewWrap: { position: 'relative' },
+  photoPreview: { width: '100%', height: 160, resizeMode: 'cover' },
+  photoOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 8, padding: 8,
+  },
+  photoOverlayText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+
+  formActions: { flexDirection: 'row', gap: 12, marginTop: 4, marginBottom: 32 },
   cancelBtn: {
     flex: 1, paddingVertical: 16, borderRadius: 14,
     backgroundColor: '#f1f5f9', alignItems: 'center',
