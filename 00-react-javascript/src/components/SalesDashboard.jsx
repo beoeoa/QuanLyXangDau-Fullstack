@@ -392,7 +392,7 @@ function SalesDashboard({ user, onLogout }) {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <h2>📊 Tổng Quan Kinh Doanh</h2>
-                <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                <div className="stats-grid">
                     <div className="stat-card" style={{ borderLeft: '4px solid #3498db' }}>
                         <div className="stat-icon" style={{ color: '#3498db' }}><ClipboardList size={24} /></div>
                         <div className="stat-info">
@@ -424,7 +424,7 @@ function SalesDashboard({ user, onLogout }) {
                 </div>
 
                 {/* Biểu đồ doanh số theo sản phẩm */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
                     <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                         <h3 style={{ marginTop: 0 }}>📊 Doanh số theo sản phẩm (Lít)</h3>
                         {(() => {

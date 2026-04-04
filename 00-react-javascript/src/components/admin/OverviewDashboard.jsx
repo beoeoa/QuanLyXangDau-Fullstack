@@ -245,7 +245,7 @@ function OverviewDashboard() {
             </div>
 
             {/* ========== KPI CARDS ========== */}
-            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+            <div className="stats-grid">
                 <div className="stat-card" style={{ borderLeft: '4px solid #27ae60' }}>
                     <div className="stat-icon" style={{ color: '#27ae60' }}><DollarSign size={24} /></div>
                     <div className="stat-info">
@@ -284,7 +284,7 @@ function OverviewDashboard() {
             </div>
 
             {/* ========== BIỂU ĐỒ ========== */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                 <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                     <h3 style={{ marginTop: 0 }}>📊 Doanh Thu & Chi Phí Theo Tháng</h3>
                     {revenueChartData && (
@@ -309,7 +309,7 @@ function OverviewDashboard() {
             {/* ========== TỔNG QUAN NHÂN SỰ ========== */}
             <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                 <h3 style={{ marginTop: 0 }}>👥 Tổng Quan Nhân Sự</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
                     <div style={{ textAlign: 'center', padding: '15px', background: '#eaf2f8', borderRadius: '8px' }}>
                         <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#2980b9' }}>{stats.drivers}</div>
                         <div style={{ fontSize: '14px', color: '#666' }}>🚗 Tài Xế</div>

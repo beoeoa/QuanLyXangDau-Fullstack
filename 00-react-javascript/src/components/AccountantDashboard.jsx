@@ -474,7 +474,7 @@ function AccountantDashboard({ user, onLogout }) {
         </div>
 
         {/* --- KPI Cards (premium stats-grid) --- */}
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div className="stats-grid">
           <div className="stat-card" style={{ borderLeft: '4px solid #27ae60' }}>
             <div className="stat-icon" style={{ color: '#27ae60' }}><DollarSign size={24} /></div>
             <div className="stat-info">
@@ -514,7 +514,7 @@ function AccountantDashboard({ user, onLogout }) {
 
 
         {/* Biểu đồ doanh thu vs chi phí */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
           <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <h3 style={{ marginTop: 0 }}>Doanh Thu &amp; Chi Phí Theo Tháng</h3>
             {(() => {
