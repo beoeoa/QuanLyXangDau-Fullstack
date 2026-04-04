@@ -1015,10 +1015,22 @@ function AccountantDashboard({ user, onLogout }) {
                     {isOverLimit && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 4 }}>Vượt định mức 0.5%!</div>}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                      {docs.exportSlip ? <span title="Phiếu XK">📝</span> : <span title="Thiếu Phiếu XK">⚠️</span>}
-                      {docs.deliveryReceipt ? <span title="Biên bản giao">📝</span> : <span title="Thiếu Biên bản">⚠️</span>}
-                      {docs.lossReport ? <span title="BB Hao hụt">📝</span> : <span title="Thiếu BB Hao hụt">⚠️</span>}
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      {docs.exportSlip ? 
+                        <a href={docs.exportSlip} target="_blank" rel="noreferrer" title="Phiếu Xuất Kho"><span style={{fontSize: 20}}>📄</span></a> 
+                        : <span title="Thiếu Phiếu XK">⚠️</span>}
+                      
+                      {docs.deliveryReceipt ? 
+                        <a href={docs.deliveryReceipt} target="_blank" rel="noreferrer" title="Biên bản Giao Nhận (Ảnh từ tài xế)">
+                          {docs.deliveryReceipt.startsWith('http') ? (
+                            <img src={docs.deliveryReceipt} alt="BB GN" style={{ width: 28, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid #10b981' }} />
+                          ) : <span style={{fontSize: 20}}>📄</span>}
+                        </a> 
+                        : <span title="Thiếu Biên bản">⚠️</span>}
+                        
+                      {docs.lossReport ? 
+                        <a href={docs.lossReport} target="_blank" rel="noreferrer" title="BB Hao hụt"><span style={{fontSize: 20}}>📉</span></a> 
+                        : <span title="Thiếu BB Hao hụt">⚠️</span>}
                     </div>
                   </td>
                   <td style={{ textAlign: 'center' }}>
