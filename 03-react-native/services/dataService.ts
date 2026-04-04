@@ -5,7 +5,7 @@ const getApiUrl = () => {
   if (envUrl && typeof envUrl === 'string') return envUrl;
 
   if (__DEV__) {
-    return 'http://10.0.2.2:3001/api'; 
+    return 'http://10.0.2.2:3001/api';
   }
 
   return 'https://quanlyxangdau-fullstack.onrender.com/api';
@@ -23,6 +23,54 @@ const safeParseJSON = async (res: Response) => {
 };
 
 const API_URL = getApiUrl();
+
+// ─── Firebase Storage Upload ────────────────────────────────────────────────
+let _storageReady = false;
+let _storageRef: any = null;
+let _uploadBytes: any = null;
+let _getDownloadURL: any = null;
+
+const initStorage = async () => {
+  if (_storageReady) return true;
+  try {
+    const { initializeApp, getApps } = await import('firebase/app');
+    const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+    const cfg = {
+      apiKey: (process.env as any).EXPO_PUBLIC_FIREBASE_API_KEY || '',
+      authDomain: (process.env as any).EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+      projectId: (process.env as any).EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
+      storageBucket: (process.env as any).EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+      messagingSenderId: (process.env as any).EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+      appId: (process.env as any).EXPO_PUBLIC_FIREBASE_APP_ID || '',
+    };
+    const app = getApps().length === 0 ? initializeApp(cfg) : getApps()[0];
+    const storage = getStorage(app);
+    _storageRef = (path: string) => ref(storage, path);
+    _uploadBytes = uploadBytes;
+    _getDownloadURL = getDownloadURL;
+    _storageReady = true;
+    return true;
+  } catch (e) {
+    console.warn('[STORAGE] Firebase Storage chưa cấu hình:', e);
+    return false;
+  }
+};
+
+/**
+ * Upload ảnh từ localUri (file://) lên Firebase Storage.
+ * Trả về download URL để lưu vào Firestore.
+ */
+export const uploadImageToFirebase = async (localUri: string, path: string): Promise<string> => {
+  const ok = await initStorage();
+  if (!ok) throw new Error('Firebase Storage chưa khởi tạo');
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  const storageRef = _storageRef(path);
+  await _uploadBytes(storageRef, blob);
+  return await _getDownloadURL(storageRef);
+};
+
+
 
 export const fetchDriverOrders = async (driverId: string) => {
   try {
@@ -371,7 +419,7 @@ export const fetchMonthlyRevenue = async () => {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const label = `T${d.getMonth() + 1}`;
-      
+
       const mOrders = (orders as any[]).filter((o: any) => {
         const t = o.updatedAt?._seconds ? new Date(o.updatedAt._seconds * 1000) : new Date(o.updatedAt || o.createdAt || 0);
         return t.getMonth() === d.getMonth() && t.getFullYear() === d.getFullYear() && o.status === 'completed';
@@ -392,12 +440,12 @@ export const fetchMonthlyRevenue = async () => {
       });
 
       const driverExp = mExp.reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-      
+
       months.push({ label, rev, exp: costGoods + driverExp });
     }
     return months;
-  } catch (error) { 
+  } catch (error) {
     console.error('[STATS] Lỗi tính toán lợi nhuận tháng:', error);
-    return []; 
+    return [];
   }
 };

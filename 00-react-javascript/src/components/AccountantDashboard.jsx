@@ -710,7 +710,25 @@ function AccountantDashboard({ user, onLogout }) {
                     </span>
                   </td>
                   <td style={{ textAlign: 'center' }}>{o.vehiclePlate}</td>
-                  <td style={{ textAlign: 'center' }}>{o.assignedDriverName || '-'}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {/* POD — Ảnh chứng từ từ tài xế gửi lên */}
+                    {o.documents?.deliveryReceipt ? (
+                      <a href={o.documents.deliveryReceipt} target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+                        <img src={o.documents.deliveryReceipt} alt="biên bản"
+                          style={{ width: 52, height: 40, objectFit: 'cover', borderRadius: 6, border: '2px solid #27ae60' }} />
+                        <span style={{ fontSize: 10, color: '#27ae60', fontWeight: 700 }}>Đủ BB GN</span>
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, padding: '4px 8px', background: '#fef3c7', borderRadius: 6 }}>⏳ Chờ tài xế</span>
+                    )}
+                    {o.documents?.lossReport && (
+                      <a href={o.documents.lossReport} target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-block', marginTop: 4, fontSize: 10, color: '#6366f1', fontWeight: 600 }}>
+                        📄 Phiếu hao hụt
+                      </a>
+                    )}
+                  </td>
                   <td style={{ textAlign: 'center' }}>
                     <button onClick={() => handleExportImportSlip(originalOrder)}
                       style={{ padding: '4px 8px', background: '#3498db', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, marginRight: 4 }} title="In Phiếu nhập kho (Theo mẫu 01-VT)">
