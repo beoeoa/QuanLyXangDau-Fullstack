@@ -1,16 +1,24 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotificationStore } from '../../store/notificationStore';
 
 export default function DriverLayout() {
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          { 
+            height: (Platform.OS === 'ios' ? 60 : 65) + Math.max(insets.bottom, 5), 
+            paddingBottom: Math.max(insets.bottom, 5) 
+          }
+        ],
         tabBarActiveTintColor: '#4f46e5',
         tabBarInactiveTintColor: '#94a3b8',
         tabBarLabelStyle: styles.tabLabel,
@@ -84,8 +92,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopColor: '#e2e8f0',
     borderTopWidth: 1,
-    height: 65,
-    paddingBottom: 8,
     paddingTop: 5,
     elevation: 8,
     shadowColor: '#000',
