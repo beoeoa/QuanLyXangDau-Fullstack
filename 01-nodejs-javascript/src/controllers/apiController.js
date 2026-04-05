@@ -870,16 +870,17 @@ const uploadImageCtrl = [
 
             await file.save(req.file.buffer, {
                 metadata: { contentType: req.file.mimetype || 'image/jpeg' },
-                public: false,
             });
 
-            // Tạo signed URL có thời hạn 10 năm
-            const [signedUrl] = await file.getSignedUrl({
-                action: 'read',
-                expires: '03-01-2035',
-            });
+            // Cấp quyền public read
+            await file.makePublic();
 
-            res.json({ success: true, url: signedUrl });
+            // URL công khai chuẩn của Firebase Storage
+            const encodedPath = encodeURIComponent(storagePath);
+            const bucketName = bucket.name;
+            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media`;
+
+            res.json({ success: true, url: publicUrl });
         } catch (e) {
             console.error('[UPLOAD] Lỗi upload ảnh:', e.message);
             res.status(500).json({ success: false, message: e.message });

@@ -7,7 +7,7 @@ import { getAllDeliveryOrders, createDeliveryOrder, deleteDeliveryOrder } from '
 import { getAllPrices } from '../services/priceService'
 import { getAllFleetVehicles } from '../services/fleetVehicleService'
 import { getAllUsers } from '../services/userService'
-import { getAllSOS } from '../services/sosReportService'
+import { getAllSOSReports as getAllSOS } from '../services/sosReportService'
 import Profile from './Profile'
 import { Bar, Doughnut } from 'react-chartjs-2'
 import {
