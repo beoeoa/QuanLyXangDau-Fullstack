@@ -330,7 +330,13 @@ export default function TripDetailScreen() {
           <Ionicons name="arrow-back" size={24} color="#0f172a" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chi Tiết Chuyến #{trip.id?.toString().slice(0, 6)}</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity 
+          onPress={() => router.push({ pathname: '/(driver)/expense-form', params: { orderId: trip.id } })}
+          style={{ padding: 6, backgroundColor: '#fef08a', borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+        >
+          <Ionicons name="receipt" size={16} color="#854d0e" />
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#854d0e' }}>Chi phí</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -524,6 +530,14 @@ export default function TripDetailScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <TouchableOpacity
+        style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: '#fef3c7', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#fde047' }}
+        onPress={() => router.push({ pathname: '/(driver)/expense-form', params: { orderId: trip.id } })}
+      >
+        <Ionicons name="cash-outline" size={24} color="#b45309" />
+        <Text style={{ fontSize: 16, fontWeight: '800', color: '#b45309' }}>GHI NHẬN CHI PHÍ KHI ĐI ĐƯỜNG</Text>
+      </TouchableOpacity>
 
       {/* Bottom Action Button */}
       {currentStep < 4 && (
