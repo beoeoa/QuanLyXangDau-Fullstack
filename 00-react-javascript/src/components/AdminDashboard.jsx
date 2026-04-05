@@ -14,11 +14,12 @@ import OrderManager from './admin/OrderManager'
 import LiveTrackingMap from './shared/LiveTrackingMap'
 import Profile from './Profile'
 import NotificationBell from './NotificationBell'
+import SOSManager from './admin/SOSManager'
 import { getAllFleetVehicles } from '../services/fleetVehicleService'
 import { getAllUsers } from '../services/userService'
 import {
   LayoutDashboard, ShoppingCart, BadgeDollarSign, FileSignature,
-  CalendarClock, Factory, Users, Map, Truck, ShieldCheck, ClipboardList, Menu
+  CalendarClock, Factory, Users, Map, Truck, ShieldCheck, ClipboardList, Menu, AlertTriangle
 } from 'lucide-react'
 
 function AdminDashboard({ user, onLogout }) {
@@ -67,6 +68,7 @@ function AdminDashboard({ user, onLogout }) {
       case 'prices': return <PriceManager />
       case 'driver-schedules': return <DriverScheduleManager />
       case 'tracking': return <LiveTrackingMap />
+      case 'sos': return <SOSManager />
       case 'auditlog': return <AuditLogManager />
       default: return <OverviewDashboard />
     }
@@ -120,6 +122,8 @@ function AdminDashboard({ user, onLogout }) {
               onClick={() => setActiveMenu('fleet')}><Truck size={18} /> Quản Lý Xe Bồn</li>
             <li className={`menu-item ${activeMenu === 'employees' ? 'active' : ''}`}
               onClick={() => setActiveMenu('employees')}><ShieldCheck size={18} /> Nhân Viên & Quyền</li>
+            <li className={`menu-item ${activeMenu === 'sos' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('sos')} style={{ color: '#ef4444' }}><AlertTriangle size={18} color="#ef4444" /> Xử Lý Sự Cố (SOS)</li>
 
             <li className="menu-section-title">Hệ thống</li>
             <li className={`menu-item ${activeMenu === 'auditlog' ? 'active' : ''}`}
