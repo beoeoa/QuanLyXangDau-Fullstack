@@ -842,6 +842,52 @@ const deleteRouteCtrl = async (req, res) => {
     catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
+// ===========================
+// IMAGE UPLOAD (Firebase Admin SDK + Multer)
+// - Nhận file ảnh multipart từ app mobile
+// - Upload lên Firebase Storage bằng Admin SDK (không bị chặn bởi Security Rules)
+// ===========================
+const multer = require('multer');
+const { storage } = require('../config/firebase');
+
+// Dùng memory storage — không ghi ra đĩa, xử lý trong RAM
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+const uploadImageCtrl = [
+    upload.single('image'),
+    async (req, res) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ success: false, message: 'Không nhận được file ảnh' });
+            }
+            const storagePath = req.body.path;
+            if (!storagePath) {
+                return res.status(400).json({ success: false, message: 'Thiếu đường dẫn lưu trữ' });
+            }
+
+            const bucket = storage.bucket();
+            const file = bucket.file(storagePath);
+
+            await file.save(req.file.buffer, {
+                metadata: { contentType: req.file.mimetype || 'image/jpeg' },
+                public: false,
+            });
+
+            // Tạo signed URL có thời hạn 10 năm
+            const [signedUrl] = await file.getSignedUrl({
+                action: 'read',
+                expires: '03-01-2035',
+            });
+
+            res.json({ success: true, url: signedUrl });
+        } catch (e) {
+            console.error('[UPLOAD] Lỗi upload ảnh:', e.message);
+            res.status(500).json({ success: false, message: e.message });
+        }
+    }
+];
+
+
 module.exports = {
     // Users
     getUsers, getUserById, getUserByEmail, registerUser,
@@ -882,5 +928,7 @@ module.exports = {
     // Driver Schedules
     getDriverSchedulesCtrl, addDriverScheduleCtrl, updateDriverScheduleCtrl, deleteDriverScheduleCtrl, getSchedulesByDriverCtrl,
     // Routes
-    saveRouteCtrl, getRouteCtrl, getUserRoutesCtrl, deleteRouteCtrl
+    saveRouteCtrl, getRouteCtrl, getUserRoutesCtrl, deleteRouteCtrl,
+    // Image Upload
+    uploadImageCtrl
 };

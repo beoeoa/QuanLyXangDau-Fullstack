@@ -48,7 +48,9 @@ const {
     // Driver Trip Stats (Automated)
     getDriverTripStatsCtrl, getAllDriverTripStatsCtrl,
     // Routes
-    saveRouteCtrl, getRouteCtrl, getUserRoutesCtrl, deleteRouteCtrl
+    saveRouteCtrl, getRouteCtrl, getUserRoutesCtrl, deleteRouteCtrl,
+    // Image Upload
+    uploadImageCtrl
 } = require('../controllers/apiController');
 
 // ===========================
@@ -211,5 +213,10 @@ routerAPI.post('/routes', saveRouteCtrl);
 routerAPI.get('/routes/:id', getRouteCtrl);
 routerAPI.get('/routes/user/:userId', getUserRoutesCtrl);
 routerAPI.delete('/routes/:id', deleteRouteCtrl);
+
+// ===========================
+// IMAGE UPLOAD (via Firebase Admin SDK)
+// ===========================
+routerAPI.post('/upload/image', uploadImageCtrl);
 
 module.exports = routerAPI;

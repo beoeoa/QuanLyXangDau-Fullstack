@@ -24,40 +24,43 @@ const safeParseJSON = async (res: Response) => {
 
 const API_URL = getApiUrl();
 
-// ─── Firebase Storage Upload via REST API ───────────────────────────────────
-// Dùng Firebase Storage REST API thay vì SDK để tránh lỗi dynamic import trên RN
-const FIREBASE_STORAGE_BUCKET = process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'quanlyxangdau-3fa49.firebasestorage.app';
-const FIREBASE_API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBKpmlQ8f4VkkyzGftw7a0Qy_z11fkXe-8';
+// ─── Image Upload via Backend Proxy ─────────────────────────────────────────
+// App mobile gửi ảnh (FormData) → Backend Node.js → Firebase Storage (Admin SDK)
+// Cách này KHÔNG bị chặn bởi Firebase Storage Security Rules
 
 /**
- * Upload ảnh từ localUri (file://) lên Firebase Storage qua REST API.
- * Trả về download URL để lưu vào Firestore.
+ * Upload ảnh từ localUri (file://) lên Firebase Storage qua backend proxy.
+ * Trả về download URL (signed URL) để lưu vào Firestore.
  */
 export const uploadImageToFirebase = async (localUri: string, storagePath: string): Promise<string> => {
-  // Đọc file thành blob
-  const fileRes = await fetch(localUri);
-  if (!fileRes.ok) throw new Error('Không đọc được file ảnh');
-  const blob = await fileRes.blob();
+  // Tạo FormData với file ảnh
+  const formData = new FormData();
+  const filename = localUri.split('/').pop() || 'photo.jpg';
+  const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
+  const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
-  // Encode đường dẫn để dùng trong URL
-  const encodedPath = encodeURIComponent(storagePath);
-  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name=${encodedPath}&key=${FIREBASE_API_KEY}`;
+  // React Native hỗ trợ thêm file trực tiếp vào FormData theo dạng object
+  formData.append('image', {
+    uri: localUri,
+    name: filename,
+    type: mimeType,
+  } as any);
+  formData.append('path', storagePath);
 
-  const uploadRes = await fetch(uploadUrl, {
+  const uploadRes = await fetch(`${API_URL}/upload/image`, {
     method: 'POST',
-    headers: { 'Content-Type': blob.type || 'image/jpeg' },
-    body: blob,
+    body: formData,
+    // KHÔNG set Content-Type để browser/RN tự set multipart boundary
   });
 
   if (!uploadRes.ok) {
-    const errText = await uploadRes.text();
-    throw new Error(`Upload thất bại: ${uploadRes.status} - ${errText}`);
+    const errData = await uploadRes.json().catch(() => ({}));
+    throw new Error(errData.message || `Upload thất bại: ${uploadRes.status}`);
   }
 
-  const uploadData = await uploadRes.json();
-  // Tạo download URL có token
-  const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodedPath}?alt=media&token=${uploadData.downloadTokens}`;
-  return downloadUrl;
+  const data = await uploadRes.json();
+  if (!data.url) throw new Error('Không nhận được URL từ server');
+  return data.url;
 };
 
 
