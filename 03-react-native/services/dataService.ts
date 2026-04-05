@@ -247,6 +247,7 @@ export const createDriverExpense = async (data: {
   type: string;
   amount: number;
   description: string;
+  receiptImage?: string;
 }) => {
   try {
     const res = await fetch(`${API_URL}/driver-expenses`, {

@@ -2,8 +2,9 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityInd
 import { useState } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
-import { createDriverExpense } from '../../services/dataService';
+import { createDriverExpense, uploadImageToFirebase } from '../../services/dataService';
 
 const EXPENSE_TYPES = [
   { id: 'fuel', label: 'Xăng dầu', icon: 'car' },
@@ -21,7 +22,50 @@ export default function ExpenseFormScreen() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [sending, setSending] = useState(false);
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      await ImagePicker.requestCameraPermissionsAsync();
+    }
+
+    Alert.alert('Chụp Hóa Đơn/Biên Lai', 'Chọn nguồn ảnh', [
+      {
+        text: '📷 Chụp ảnh mới',
+        onPress: async () => {
+          const result = await ImagePicker.launchCameraAsync({ quality: 0.6 });
+          if (!result.canceled && result.assets[0]?.uri) {
+            uploadPhoto(result.assets[0].uri);
+          }
+        }
+      },
+      {
+        text: '🖼️ Thư viện ảnh',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 });
+          if (!result.canceled && result.assets[0]?.uri) {
+            uploadPhoto(result.assets[0].uri);
+          }
+        }
+      },
+      { text: 'Hủy', style: 'cancel' }
+    ]);
+  };
+
+  const uploadPhoto = async (uri: string) => {
+    try {
+      setUploadingImage(true);
+      const url = await uploadImageToFirebase(uri, `driver-expenses/${user?.userId}/${Date.now()}.jpg`);
+      setPhotoUrl(url);
+    } catch (e: any) {
+      Alert.alert('Lỗi', 'Không thể tải ảnh. Chi tiết: ' + e.message);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!selectedType) {
@@ -41,6 +85,7 @@ export default function ExpenseFormScreen() {
       type: selectedType,
       amount: Number(amount),
       description: description || 'Không có mô tả',
+      receiptImage: photoUrl || undefined,
     });
     setSending(false);
 
@@ -106,6 +151,20 @@ export default function ExpenseFormScreen() {
           numberOfLines={3}
         />
 
+        <Text style={styles.formLabel}>Hóa đơn / Biên lai / Vé BOT</Text>
+        <TouchableOpacity style={styles.uploadBtn} onPress={handlePickImage} disabled={uploadingImage}>
+          {uploadingImage ? (
+            <ActivityIndicator color="#4f46e5" />
+          ) : photoUrl ? (
+            <Text style={styles.uploadBtnSuccess} numberOfLines={1}>✅ Đã đính kèm ảnh hóa đơn</Text>
+          ) : (
+            <>
+              <Ionicons name="camera-outline" size={24} color="#64748b" />
+              <Text style={styles.uploadBtnText}>Chụp ảnh hoặc Chọn ảnh</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
         {orderId && (
           <View style={styles.linkedOrder}>
             <Ionicons name="link" size={16} color="#4f46e5" />
@@ -166,6 +225,14 @@ const styles = StyleSheet.create({
     padding: 10, borderRadius: 10, marginTop: 16,
   },
   linkedOrderText: { color: '#4f46e5', fontSize: 13, fontWeight: '600' },
+
+  uploadBtn: {
+    borderWidth: 1.5, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: 18, backgroundColor: '#ffffff',
+  },
+  uploadBtnText: { color: '#64748b', fontSize: 14, fontWeight: '600' },
+  uploadBtnSuccess: { color: '#059669', fontSize: 14, fontWeight: '700' },
 
   submitBtn: {
     marginHorizontal: 16, marginBottom: 30,

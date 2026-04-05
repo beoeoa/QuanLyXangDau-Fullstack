@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchSOSReports, updateSOSStatus } from '../../services/dataService';
 import { useState, useCallback, useMemo } from 'react';
@@ -76,6 +76,10 @@ export default function SOSReportsScreen() {
           <Ionicons name="chatbubble-ellipses" size={16} color="#ef4444" />
           <Text style={styles.message}>{item.message || item.description || 'Không có tin nhắn SOS'}</Text>
         </View>
+
+        {!!item.photoUrl && (
+          <Image source={{ uri: item.photoUrl }} style={{ width: '100%', height: 180, borderRadius: 12, marginBottom: 12, backgroundColor: '#f1f5f9' }} resizeMode="cover" />
+        )}
 
         {(item.locationName || item.lat) && (
           <View style={styles.locationRow}>

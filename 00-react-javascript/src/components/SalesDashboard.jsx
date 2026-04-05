@@ -7,6 +7,7 @@ import { getAllDeliveryOrders, createDeliveryOrder, deleteDeliveryOrder } from '
 import { getAllPrices } from '../services/priceService'
 import { getAllFleetVehicles } from '../services/fleetVehicleService'
 import { getAllUsers } from '../services/userService'
+import { getAllSOS } from '../services/sosReportService'
 import Profile from './Profile'
 import { Bar, Doughnut } from 'react-chartjs-2'
 import {
@@ -27,7 +28,7 @@ import ImportDataModal from './shared/ImportDataModal'
 import OCRScanner from './shared/OCRScanner'
 import LiveTrackingMap from './shared/LiveTrackingMap'
 import PriceManager from './admin/PriceManager'
-import { LayoutDashboard, UsersRound, ShoppingCart, BadgeDollarSign, FileSignature, Truck, Map, CalendarClock, UserCheck, Menu, ClipboardList, CheckCircle } from 'lucide-react'
+import { LayoutDashboard, UsersRound, ShoppingCart, BadgeDollarSign, FileSignature, Truck, Map, CalendarClock, UserCheck, Menu, ClipboardList, CheckCircle, AlertTriangle } from 'lucide-react'
 
 function SalesDashboard({ user, onLogout }) {
     const [activeMenu, setActiveMenu] = useState('overview')
@@ -50,8 +51,10 @@ function SalesDashboard({ user, onLogout }) {
     const [vehicles, setVehicles] = useState([])
     const [drivers, setDrivers] = useState([])
     const [prices, setPrices] = useState([])
+    const [sosReports, setSosReports] = useState([])
 
     // Form states
+    const [viewingImage, setViewingImage] = useState(null)
     const [showCustForm, setShowCustForm] = useState(false)
     const [editingCust, setEditingCust] = useState(null)
     const [custForm, setCustForm] = useState({ name: '', address: '', contact: '', phone: '' })
@@ -108,9 +111,9 @@ function SalesDashboard({ user, onLogout }) {
 
     const loadAll = async () => {
         setLoading(true)
-        const [custs, ords, delOrds, vehs, usrs, prcs] = await Promise.all([
+        const [custs, ords, delOrds, vehs, usrs, prcs, sosData] = await Promise.all([
             getAllCustomers(), getAllOrders(), getAllDeliveryOrders(),
-            getAllFleetVehicles(), getAllUsers(), getAllPrices()
+            getAllFleetVehicles(), getAllUsers(), getAllPrices(), getAllSOS()
         ])
         setCustomers(Array.isArray(custs) ? custs : [])
         setOrders(Array.isArray(ords) ? ords : [])
@@ -118,6 +121,7 @@ function SalesDashboard({ user, onLogout }) {
         setVehicles(Array.isArray(vehs) ? vehs : [])
         setDrivers(Array.isArray(usrs) ? usrs.filter(u => u.role === 'driver' && u.isApproved !== false) : [])
         setPrices(Array.isArray(prcs) ? prcs : [])
+        setSosReports(Array.isArray(sosData) ? sosData : [])
         setLoading(false)
     }
 
@@ -1344,6 +1348,46 @@ function SalesDashboard({ user, onLogout }) {
         )
     }
 
+    // ==== SỰ CỐ (SOS) ====
+    const renderSOS = () => {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <h2>🚨 Xử Lý Cảnh Báo Khẩn Cấp (SOS)</h2>
+                <div style={{ padding: 15, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
+                    <p style={{ margin: 0, color: '#991b1b' }}>Đây là màn hình theo dõi các sự cố do tài xế báo cáo dọc đường. Nhấp vào ảnh để xem toàn màn hình.</p>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <thead><tr style={{ background: '#f5f5f5' }}>
+                        <th style={{ padding: 10, textAlign: 'left' }}>Thời gian</th><th>Tài xế</th><th>Loại sự cố</th><th>Mô tả</th><th>Ảnh</th><th>Trạng thái</th>
+                    </tr></thead>
+                    <tbody>
+                        {sosReports.length === 0 ? <tr><td colSpan="6" style={{ padding: 20, textAlign: 'center', color: '#999' }}>Không có báo cáo SOS nào.</td></tr> :
+                            sosReports.map(sos => (
+                                <tr key={sos.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                    <td style={{ padding: 10 }}>{new Date(sos.createdAt).toLocaleString('vi-VN')}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{sos.driverName}</td>
+                                    <td style={{ textAlign: 'center', color: '#e74c3c' }}>{sos.type}</td>
+                                    <td style={{ textAlign: 'center' }}>{sos.description}</td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        {sos.photoUrl ? (
+                                            <img src={sos.photoUrl} alt="sos" onClick={() => setViewingImage(sos.photoUrl)} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer', border: '1px solid #ccc' }} />
+                                        ) : '-'}
+                                    </td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <span style={{
+                                            padding: '3px 8px', borderRadius: 10, fontSize: 11, fontWeight: 'bold',
+                                            background: sos.status === 'resolved' ? '#d4edda' : sos.status === 'acknowledged' ? '#fff3cd' : '#f8d7da'
+                                        }}>{sos.status === 'resolved' ? '✅ Đã xử lý' : sos.status === 'acknowledged' ? '👀 Đã ghi nhận' : '🚨 Chưa xử lý'}</span>
+                                    </td>
+                                </tr>
+                            ))
+                        }
+                    </tbody>
+                </table>
+            </div>
+        )
+    }
+
     const renderContent = () => {
         switch (activeMenu) {
             case 'overview': return renderOverview()
@@ -1352,6 +1396,7 @@ function SalesDashboard({ user, onLogout }) {
             case 'prices': return <PriceManager isReadOnly={true} />
             case 'dispatch': return renderDispatch()
             case 'tracking': return <LiveTrackingMap />
+            case 'sos': return renderSOS()
             case 'driver-schedules': return <DriverScheduleManager />
             case 'contracts': return <ContractManager />
             case 'profile': return <Profile currentUser={user} />
@@ -1488,6 +1533,19 @@ function SalesDashboard({ user, onLogout }) {
                     alert('✅ Đã điền thông tin từ GPĐKKD! Vui lòng kiểm tra và lưu.')
                 }}
             />
+            {/* Image Viewer Overlay */}
+            {viewingImage && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                    background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    flexDirection: 'column'
+                }} onClick={() => setViewingImage(null)}>
+                    <button style={{ position: 'absolute', top: 20, right: 30, background: 'none', border: 'none', color: 'white', fontSize: 30, cursor: 'pointer' }} onClick={() => setViewingImage(null)}>
+                        ✖
+                    </button>
+                    <img src={viewingImage} alt="Fullscreen Attachment" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: 8, border: '4px solid white' }} />
+                </div>
+            )}
         </div>
     )
 }

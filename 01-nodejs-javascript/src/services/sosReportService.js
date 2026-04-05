@@ -29,9 +29,22 @@ const getAllSOSReports = async () => {
     const snapshot = await db.collection(SOS_COLLECTION)
         .orderBy('createdAt', 'desc')
         .get();
+        
+    const usersSnap = await db.collection('users').get();
+    const usersMap = {};
+    usersSnap.docs.forEach(d => { usersMap[d.id] = d.data() });
+
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        return { id: doc.id, ...data, createdAt: data.createdAt?.toDate?.() || data.createdAt };
+        const driverId = data.driverId;
+        const driverInfo = driverId ? usersMap[driverId] : null;
+
+        return { 
+            id: doc.id, 
+            ...data, 
+            driverPhone: data.driverPhone || (driverInfo ? driverInfo.phone : null),
+            createdAt: data.createdAt?.toDate?.() || data.createdAt 
+        };
     });
 };
 

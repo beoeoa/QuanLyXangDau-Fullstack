@@ -57,6 +57,7 @@ function AccountantDashboard({ user, onLogout }) {
   const [showImportExpenses, setShowImportExpenses] = useState(false)
   const [showConfirmAR, setShowConfirmAR] = useState(false)
   const [confirmARTrip, setConfirmARTrip] = useState(null)
+  const [viewingImage, setViewingImage] = useState(null)
 
   // Lương cứng (baseSalary) của tài xế: dùng updateUser để thêm/sửa/xóa
   const [payrollEditorOpen, setPayrollEditorOpen] = useState(false)
@@ -713,20 +714,20 @@ function AccountantDashboard({ user, onLogout }) {
                   <td style={{ textAlign: 'center' }}>
                     {/* POD — Ảnh chứng từ từ tài xế gửi lên */}
                     {o.documents?.deliveryReceipt ? (
-                      <a href={o.documents.deliveryReceipt} target="_blank" rel="noreferrer"
-                        style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+                      <div onClick={() => setViewingImage(o.documents.deliveryReceipt)}
+                        style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                         <img src={o.documents.deliveryReceipt} alt="biên bản"
                           style={{ width: 52, height: 40, objectFit: 'cover', borderRadius: 6, border: '2px solid #27ae60' }} />
                         <span style={{ fontSize: 10, color: '#27ae60', fontWeight: 700 }}>Đủ BB GN</span>
-                      </a>
+                      </div>
                     ) : (
                       <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, padding: '4px 8px', background: '#fef3c7', borderRadius: 6 }}>⏳ Chờ tài xế</span>
                     )}
                     {o.documents?.lossReport && (
-                      <a href={o.documents.lossReport} target="_blank" rel="noreferrer"
-                        style={{ display: 'inline-block', marginTop: 4, fontSize: 10, color: '#6366f1', fontWeight: 600 }}>
+                      <div onClick={() => setViewingImage(o.documents.lossReport)}
+                        style={{ display: 'inline-block', marginTop: 4, fontSize: 10, color: '#6366f1', fontWeight: 600, cursor: 'pointer' }}>
                         📄 Phiếu hao hụt
-                      </a>
+                      </div>
                     )}
                   </td>
                   <td style={{ textAlign: 'center' }}>
@@ -805,7 +806,7 @@ function AccountantDashboard({ user, onLogout }) {
               <td style={{ textAlign: 'center' }}>{e.description || '-'}</td>
               <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{Number(e.amount).toLocaleString()}</td>
               <td style={{ textAlign: 'center' }}>
-                {e.receiptImage ? <img src={e.receiptImage} alt="receipt" style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4 }} /> : '-'}
+                {e.receiptImage ? <img src={e.receiptImage} alt="receipt" onClick={() => setViewingImage(e.receiptImage)} style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} /> : '-'}
               </td>
               <td style={{ textAlign: 'center' }}>
                 <span style={{
@@ -1337,6 +1338,21 @@ function AccountantDashboard({ user, onLogout }) {
           </div>
         </div>
       )}
+      
+      {/* Image Viewer Overlay */}
+      {viewingImage && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center',
+          flexDirection: 'column'
+        }} onClick={() => setViewingImage(null)}>
+          <button style={{ position: 'absolute', top: 20, right: 30, background: 'none', border: 'none', color: 'white', fontSize: 30, cursor: 'pointer' }} onClick={() => setViewingImage(null)}>
+            ✖
+          </button>
+          <img src={viewingImage} alt="Fullscreen Attachment" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: 8, border: '4px solid white' }} />
+        </div>
+      )}
+      
       <ARConfirmPaymentModal
         isOpen={showConfirmAR}
         trip={confirmARTrip}

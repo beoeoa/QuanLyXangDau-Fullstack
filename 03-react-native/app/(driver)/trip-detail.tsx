@@ -148,8 +148,8 @@ export default function TripDetailScreen() {
               const url = await uploadImageToFirebase(result.assets[0].uri, storagePath);
               onDone(url);
               Alert.alert('✅ Thành công', 'Ảnh đã được tải lên hệ thống.');
-            } catch {
-              Alert.alert('Lỗi', 'Không thể tải ảnh lên. Kiểm tra kết nối mạng.');
+            } catch (e: any) {
+              Alert.alert('Lỗi', 'Không thể tải ảnh. Chi tiết: ' + e.message);
             } finally {
               setLoadingKey(null);
             }
@@ -169,8 +169,8 @@ export default function TripDetailScreen() {
               const url = await uploadImageToFirebase(result.assets[0].uri, storagePath);
               onDone(url);
               Alert.alert('✅ Thành công', 'Ảnh đã được tải lên hệ thống.');
-            } catch {
-              Alert.alert('Lỗi', 'Không thể tải ảnh lên. Kiểm tra kết nối mạng.');
+            } catch (e: any) {
+              Alert.alert('Lỗi', 'Không thể tải ảnh. Chi tiết: ' + e.message);
             } finally {
               setLoadingKey(null);
             }
