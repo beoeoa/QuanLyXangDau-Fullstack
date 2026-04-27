@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import API_BASE from '../services/apiConfig'
 import './Dashboard.css'
 import { verifyUserRole } from '../services/authService'
 import { getOrdersByDriver, updateOrderStatus, updateOrderDocuments, updateOrderSeal } from '../services/transportationService'
@@ -49,6 +50,8 @@ function DriverDashboard({ user, onLogout }) {
 
   const [showMapForOrderId, setShowMapForOrderId] = useState(null)
   const [showOCR, setShowOCR] = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState({}) // { [orderId_docKey]: true }
+  const [uploadingExpenseImg, setUploadingExpenseImg] = useState(false)
 
   useEffect(() => {
     const checkRole = async () => {
@@ -113,17 +116,35 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  const handleDocUpload = (orderId, docType, e) => {
+  // Upload ảnh lên Firebase Storage qua backend, trả về URL công khai
+  const uploadImageToStorage = async (file, pathPrefix) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    formData.append('path', `${pathPrefix}/${Date.now()}_${file.name}`)
+    const res = await fetch(`${API_BASE}/upload/image`, {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.message || 'Upload thất bại')
+    return data.url
+  }
+
+  const handleDocUpload = async (orderId, docType, e) => {
     const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const order = orders.find(o => o.id === orderId)
-        const docs = { ...(order?.documents || {}), [docType]: reader.result }
-        await updateOrderDocuments(orderId, docs)
-        loadAllData()
-      }
-      reader.readAsDataURL(file)
+    if (!file) return
+    const key = `${orderId}_${docType}`
+    setUploadingDoc(prev => ({ ...prev, [key]: true }))
+    try {
+      const url = await uploadImageToStorage(file, `delivery-docs/${orderId}/${docType}`)
+      const order = orders.find(o => o.id === orderId)
+      const docs = { ...(order?.documents || {}), [docType]: url }
+      await updateOrderDocuments(orderId, docs)
+      loadAllData()
+    } catch (err) {
+      alert('❌ Lỗi tải ảnh lên: ' + err.message)
+    } finally {
+      setUploadingDoc(prev => ({ ...prev, [key]: false }))
     }
   }
 
@@ -153,12 +174,17 @@ function DriverDashboard({ user, onLogout }) {
     }
   }
 
-  const handleExpenseImageUpload = (e) => {
+  const handleExpenseImageUpload = async (e) => {
     const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => setExpenseForm(prev => ({ ...prev, receiptImage: reader.result }))
-      reader.readAsDataURL(file)
+    if (!file) return
+    setUploadingExpenseImg(true)
+    try {
+      const url = await uploadImageToStorage(file, `driver-expenses/${user.userId}`)
+      setExpenseForm(prev => ({ ...prev, receiptImage: url }))
+    } catch (err) {
+      alert('❌ Lỗi tải ảnh hóa đơn: ' + err.message)
+    } finally {
+      setUploadingExpenseImg(false)
     }
   }
 
@@ -250,16 +276,30 @@ function DriverDashboard({ user, onLogout }) {
                 { key: 'lossReport', label: 'Phiếu hao hụt', icon: <TrendingDown size={16} /> },
                 { key: 'exportSlip', label: 'Phiếu xuất kho', icon: <ClipboardList size={16} /> },
                 { key: 'otherDoc', label: 'Chứng từ khác', icon: <Paperclip size={16} /> }
-              ].map(doc => (
-                <div key={doc.key} style={{ fontSize: 13 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4, fontWeight: 'bold' }}>{doc.icon} {doc.label}</label>
-                  <input type="file" accept="image/*" onChange={e => handleDocUpload(order.id, doc.key, e)}
-                    style={{ fontSize: 12 }} />
-                  {order.documents?.[doc.key] && (
-                    <img src={order.documents[doc.key]} alt={doc.label} style={{ width: 50, height: 40, objectFit: 'cover', borderRadius: 4, marginTop: 4 }} />
-                  )}
-                </div>
-              ))}
+              ].map(doc => {
+                const uploadKey = `${order.id}_${doc.key}`
+                const isUploading = uploadingDoc[uploadKey]
+                return (
+                  <div key={doc.key} style={{ fontSize: 13 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4, fontWeight: 'bold' }}>{doc.icon} {doc.label}</label>
+                    <input type="file" accept="image/*"
+                      disabled={isUploading}
+                      onChange={e => handleDocUpload(order.id, doc.key, e)}
+                      style={{ fontSize: 12 }} />
+                    {isUploading && (
+                      <span style={{ fontSize: 11, color: '#2980b9', marginTop: 4, display: 'block' }}>⏳ Đang tải lên...</span>
+                    )}
+                    {!isUploading && order.documents?.[doc.key] && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <img src={order.documents[doc.key]} alt={doc.label}
+                          style={{ width: 50, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                          onClick={() => window.open(order.documents[doc.key], '_blank')} />
+                        <span style={{ fontSize: 11, color: '#27ae60', fontWeight: 700 }}>✅ Đã gửi</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             {getNextStatus(order.status) && (
@@ -337,12 +377,17 @@ function DriverDashboard({ user, onLogout }) {
           </div>
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 'bold', marginBottom: 4 }}><Camera size={16} /> Ảnh hóa đơn</label>
-            <input type="file" accept="image/*" onChange={handleExpenseImageUpload} />
+            <input type="file" accept="image/*" onChange={handleExpenseImageUpload} disabled={uploadingExpenseImg} />
           </div>
-          {expenseForm.receiptImage && (
+          {uploadingExpenseImg && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#2980b9' }}>⏳ Đang tải ảnh lên...</span>
+            </div>
+          )}
+          {!uploadingExpenseImg && expenseForm.receiptImage && (
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <img src={expenseForm.receiptImage} alt="receipt" style={{ width: 60, height: 50, objectFit: 'cover', borderRadius: 4 }} />
-              <span style={{ marginLeft: 8, color: 'green', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={14} /> Đã chọn</span>
+              <span style={{ marginLeft: 8, color: 'green', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={14} /> Đã tải lên</span>
             </div>
           )}
         </div>
